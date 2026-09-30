@@ -7,6 +7,9 @@ type ConfigType={
         clientId:string,
         secret:string,
         redirectUri:string
+    },
+    database:{
+        databaseUrl:string;
     }
 }
 type UnvalidatedConfigType= {
@@ -16,6 +19,9 @@ type UnvalidatedConfigType= {
         clientId:unknown,
         secret:unknown,
         redirectUri:unknown
+    },
+    database:{
+        databaseUrl:unknown;
     }
 }
 type ValidatedConfigType={
@@ -25,6 +31,9 @@ type ValidatedConfigType={
         clientId:string,
         secret:string,
         redirectUri:string
+    },
+    database:{
+        databaseUrl:string;
     }
 }
 function createConfig():ConfigType{
@@ -34,7 +43,10 @@ function createConfig():ConfigType{
         googleAuth:{
             clientId:process.env.GOOGLE_CLIENT_ID,
             secret:process.env.GOOGLE_CLIENT_SECRET,
-            redirectUri:process.env.GOOGLE_REDIRECT_URI
+            redirectUri:process.env.GOOGLE_REDIRECT_URI,
+        },
+        database:{
+            databaseUrl:process.env.DATABASE_URL
         }
     };
     if(validateConfig(config))
@@ -57,6 +69,8 @@ function validateConfig(config:UnvalidatedConfigType):config is ValidatedConfigT
     if(typeof config.googleAuth.redirectUri!=='string'||config.googleAuth.redirectUri.trim()==="")
         return false;
     if(typeof config.googleAuth.secret!=='string'||config.googleAuth.secret.trim()==="")
+        return false;
+    if(typeof config.database.databaseUrl!=="string"||config.database.databaseUrl.trim()==="")
         return false;
     return true;
 
