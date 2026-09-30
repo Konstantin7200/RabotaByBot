@@ -79,8 +79,8 @@ export const notificationsTable = pgTable(
     ],
 );
 
-export const oauthStatesTable = pgTable("oauth_states", {
-    state: text().primaryKey(),
+export const oauthKeysTable = pgTable("oauth_keys", {
+    key: text().primaryKey(),
     chatId: text().notNull().unique(),
     expiresAt: timestamp({ withTimezone: true }).notNull(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
