@@ -1,4 +1,4 @@
-import { gmail } from ".";
+import { gmail_v1 } from "@googleapis/gmail";
 import { isFromRabotaBy } from "./isFromRabotaBy";
 import { messageBodyToText } from "./messageBody";
 import { parseMessageFields } from "./parseMessageFields";
@@ -9,7 +9,7 @@ export interface MessageWithText {
     subject: string;
 }
 
-async function validateMessages(messageIds: string[], email: string): Promise<string[]> {
+async function validateMessages(gmail:gmail_v1.Gmail,messageIds: string[], email: string): Promise<string[]> {
     const validMessageIds: string[] = [];
     for (const id of messageIds) {
         const response = await gmail.users.messages.get({
@@ -26,8 +26,8 @@ async function validateMessages(messageIds: string[], email: string): Promise<st
     return validMessageIds;
 }
 
-async function getMessages(messageIds: string[], email: string): Promise<MessageWithText[]> {
-    const validMessageIds=await validateMessages(messageIds,email);
+async function getMessages(gmail:gmail_v1.Gmail,messageIds: string[], email: string): Promise<MessageWithText[]> {
+    const validMessageIds=await validateMessages(gmail,messageIds,email);
 
     const messages: MessageWithText[] = [];
     for (const id of validMessageIds) {
@@ -50,8 +50,8 @@ export interface MessageData {
     outcome: string | null;
 }
 
-export async function getDataFromMessages(messageIds: string[], email: string): Promise<MessageData[]> {
-    const messages = await getMessages(messageIds, email);
+export async function getDataFromMessages(gmail:gmail_v1.Gmail,messageIds: string[], email: string): Promise<MessageData[]> {
+    const messages = await getMessages(gmail,messageIds, email);
 
     return messages.map(message => ({
         gmailMessageId: message.id,

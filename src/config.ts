@@ -6,7 +6,8 @@ type ConfigType={
     googleAuth:{
         clientId:string,
         secret:string,
-        redirectUri:string
+        redirectUri:string,
+        topicName:string,
     },
     database:{
         databaseUrl:string;
@@ -18,7 +19,8 @@ type UnvalidatedConfigType= {
     googleAuth:{
         clientId:unknown,
         secret:unknown,
-        redirectUri:unknown
+        redirectUri:unknown,
+        topicName:unknown
     },
     database:{
         databaseUrl:unknown;
@@ -30,7 +32,8 @@ type ValidatedConfigType={
     googleAuth:{
         clientId:string,
         secret:string,
-        redirectUri:string
+        redirectUri:string,
+        topicName:string
     },
     database:{
         databaseUrl:string;
@@ -44,6 +47,7 @@ function createConfig():ConfigType{
             clientId:process.env.GOOGLE_CLIENT_ID,
             secret:process.env.GOOGLE_CLIENT_SECRET,
             redirectUri:process.env.GOOGLE_REDIRECT_URI,
+            topicName:process.env.GOOGLE_TOPIC_NAME,
         },
         database:{
             databaseUrl:process.env.DATABASE_URL
@@ -69,6 +73,8 @@ function validateConfig(config:UnvalidatedConfigType):config is ValidatedConfigT
     if(typeof config.googleAuth.redirectUri!=='string'||config.googleAuth.redirectUri.trim()==="")
         return false;
     if(typeof config.googleAuth.secret!=='string'||config.googleAuth.secret.trim()==="")
+        return false;
+    if(typeof config.googleAuth.topicName!=="string"||config.googleAuth.topicName.trim()==="")
         return false;
     if(typeof config.database.databaseUrl!=="string"||config.database.databaseUrl.trim()==="")
         return false;

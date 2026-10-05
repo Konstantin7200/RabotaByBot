@@ -1,10 +1,10 @@
 import { Context } from "grammy";
 import { getAuthUrl } from "../auth/signIn";
 
-export function startHandler(ctx:Context){
-    const id=ctx.chatId;
-    if(id===undefined)
+export async function startHandler(ctx:Context){
+    const chatId=ctx.chatId;
+    if(chatId===undefined)
         throw new Error(`Id is undefined ctx=${ctx}`);
-    const url=getAuthUrl(id);
-    ctx.reply(`Hi,please login /n ${url}`);
+    const url=await getAuthUrl(chatId);
+    ctx.reply(`Hi,please login\n${url}`);
 }

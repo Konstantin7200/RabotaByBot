@@ -1,6 +1,6 @@
-import { gmail } from ".";
+import { gmail_v1 } from "@googleapis/gmail";
 
-export async function getMessageIds(email:string,startId:string){
+export async function getMessageIds(gmail:gmail_v1.Gmail,email:string,startId:string){
     const response=await gmail.users.history.list({userId:email,startHistoryId:startId,historyTypes: ['messageAdded']});
     const history=response.data.history??[];
     const messageIdSet=new Set<string>();
