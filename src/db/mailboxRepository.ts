@@ -45,6 +45,11 @@ export async function getByUserId(userId:number) {
     return data.length>0?data[0]:null;
 }
 
+export async function getMailboxByChatId(chatId:string) {
+    const data=await db.select().from(mailboxesTable).innerJoin(usersTable,eq(usersTable.id,mailboxesTable.userId)).where(eq(usersTable.chatId,chatId)).limit(1);
+    return data.length>0?data[0].mailboxes:null;
+}
+
 export async function setWatchSuccess(email:string,historyIdBasis:string,watchExpiration:Date) {
     await db.update(mailboxesTable).set({historyIdBasis,watchExpiration,accessStatus:'active'}).where(eq(mailboxesTable.email,email));
 }
