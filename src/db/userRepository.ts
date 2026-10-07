@@ -22,7 +22,14 @@ export async function getChatId(email:string){
 }
 
 export async function getChatIdByMailboxId(mailboxId:number){
-    const data=await db.select({chatId:usersTable.chatId}).from(mailboxesTable).leftJoin(usersTable,eq(mailboxesTable.userId,usersTable.id)).where(eq(mailboxesTable.id,mailboxId)).limit(1);
+    const data=await db.select({chatId:usersTable.chatId}).from(mailboxesTable).leftJoin(usersTable,eq(usersTable.id,mailboxesTable.userId)).where(eq(mailboxesTable.id,mailboxId)).limit(1);
+    if(data.length===0)
+        return null;
+    return data[0].chatId;
+}
+
+export async function getChatIdByUserId(userId:number){
+    const data=await db.select({chatId:usersTable.chatId}).from(usersTable).where(eq(usersTable.id,userId)).limit(1);
     if(data.length===0)
         return null;
     return data[0].chatId;

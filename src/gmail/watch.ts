@@ -1,4 +1,5 @@
 import { EnvConfig } from "../config";
+import { setWatchSuccess } from "../db/mailboxRepository";
 import { getUserGmailClient } from "./getUserGmailClient";
 
 export async function watch(email:string,refresh_token:string,access_token?:string){
@@ -8,8 +9,11 @@ export async function watch(email:string,refresh_token:string,access_token?:stri
         requestBody:{
         topicName:EnvConfig.googleAuth.topicName
     }})
-    return {
-        historyId:response.data.historyId,
-        expiration:response.data.expiration
-    }
+    const {historyId,expiration}=response.data;
+
+    if(typeof historyId!=='string')
+        throw new Error('History id is undefined');
+    if(typeof expiration!=='string')
+        throw new Error('Expiration is undefined');
+    await setWatchSuccess(email,historyId,new Date(expiration));
 }
