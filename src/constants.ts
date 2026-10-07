@@ -1,3 +1,6 @@
+import { join } from "path";
+
+export const PUBLIC_DIR=join(__dirname,"..","public");
 
 export const BACKOFF_VALUE_MS=5_000;
 export const BACKOFF_MULT=3;
@@ -12,4 +15,6 @@ export const MESSAGE_MAILBOX_RELINKED=(email:string)=>
     `Mailbox ${email} is now linked to a different Telegram account.\nNotifications for this chat have stopped`;
 export const createReplacedMailboxMessage=(oldEmail:string,newEmail:string)=>
     `Previous mailbox ${oldEmail} was unlinked because you linked ${newEmail}`;
-export const REVOKED_SCOPES='gmail.modify';
+export const MESSAGE_FOR_AUTH_CANCELLED='Authorization was cancelled.\nRun /start to try again';
+export const MESSAGE_FOR_AUTH_FAILED='Something went wrong while linking your mailbox.\nRun /start to try again';
+export const REVOKED_SCOPES='openid, userinfo.email, gmail.readonly';

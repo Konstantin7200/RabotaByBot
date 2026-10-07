@@ -3,6 +3,7 @@ import { EnvConfig } from "./config";
 import { loadHandlers } from "./bot/loadHandlers";
 import router from "./auth/routes";
 import { gmailRouter } from "./gmail/routes";
+import { PUBLIC_DIR } from "./constants";
 
 const app = express();
 
@@ -12,6 +13,7 @@ app.get("/", (_req, res) => {
 
 loadHandlers();
 app.use(express.json());
+app.use(express.static(PUBLIC_DIR));
 app.use(gmailRouter);
 app.use(router);
 app.listen(EnvConfig.port, () => {
