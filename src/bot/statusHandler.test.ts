@@ -28,6 +28,13 @@ describe("createStatusMessage", () => {
         expect(msg).toContain("2 notification(s)");
         expect(msg).toContain("Forbidden: bot was blocked");
     });
+    it("shows only the last error, without a count, when nothing is stuck (FR-11)", () => {
+        const msg = createStatusMessage(base, "a@b.c", base, "active", false,
+            { stuckCount: 0, lastFailure: { lastError: "Forbidden: bot was blocked", attempts: 5 } });
+        expect(msg).toContain("delivery problems");
+        expect(msg).toContain("last error after 5 attempt(s): Forbidden: bot was blocked");
+        expect(msg).not.toContain("notification(s) not delivered yet");
+    });
     it("shows no delivery warning when everything is healthy", () => {
         expect(createStatusMessage(base, "a@b.c", base, "active", false, clean))
             .not.toContain("delivery problems");
