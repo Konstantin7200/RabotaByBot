@@ -1,4 +1,4 @@
-export type RenewalErrorKind = "expired" | "error" | "transient";
+export type AccessErrorKind = "expired" | "error" | "transient";
 
 function getStatusCode(err: unknown): number | undefined {
     if (typeof err !== "object" || err === null)
@@ -25,7 +25,7 @@ function getMessage(err: unknown): string {
     return String(err);
 }
 
-export function classifyRenewalError(err: unknown): RenewalErrorKind {
+export function classifyAccessError(err: unknown): AccessErrorKind {
     if (getMessage(err).includes("invalid_grant"))
         return "expired";
     if (isNetworkErrorCode(err))

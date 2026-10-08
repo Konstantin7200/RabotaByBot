@@ -7,7 +7,7 @@ import { listDueForRenewal, setAccessFailure } from "../../db/mailboxRepository"
 import { getChatIdByMailboxId } from "../../db/userRepository";
 import { sendMessage } from "../../bot/sendMessage";
 import { watch } from "../../gmail/watch";
-import { classifyRenewalError } from "../classifyRenewalError";
+import { classifyAccessError } from "../../gmail/classifyAccessError";
 
 export async function renewWatches() {
     const due = await listDueForRenewal(new Date(Date.now() + WATCH_RENEWAL_THRESHOLD_MS));
@@ -21,7 +21,7 @@ export async function renewWatches() {
         } catch (err) {
             const watchDead = mailbox.watchExpiration !== null
                 && mailbox.watchExpiration.getTime() < Date.now();
-            let kind = classifyRenewalError(err);
+            let kind = classifyAccessError(err);
             if (kind === "transient" && !watchDead) {
                 console.log({ event: "watch_renewal_transient_error", email: mailbox.email, err: String(err) });
                 continue;
