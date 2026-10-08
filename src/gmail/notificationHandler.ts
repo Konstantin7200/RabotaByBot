@@ -45,7 +45,8 @@ export async function notificationHandler(req: Request, res: Response) {
                 mailboxId:mailbox.id
             }
         })
-        await addNotifications(notifications);
+        if(notifications.length>0)
+            await addNotifications(notifications);
         const rows=await listByMessageIds(mailbox.id,messageData.map((m)=>m.gmailMessageId));
         await advanceBasis(mailbox.id,newHistoryId);
         if(rows.length===0){
