@@ -4,8 +4,7 @@ import {
     WATCH_RENEWAL_THRESHOLD_MS,
 } from "../../constants";
 import { listDueForRenewal, setAccessFailure } from "../../db/mailboxRepository";
-import { getChatIdByMailboxId } from "../../db/userRepository";
-import { sendMessage } from "../../bot/sendMessage";
+import { notifyMailboxOwner } from "../../bot/notifyMailboxOwner";
 import { watch } from "../../gmail/watch";
 import { classifyAccessError } from "../../gmail/classifyAccessError";
 
@@ -30,13 +29,10 @@ export async function renewWatches() {
                 kind = "error";
             await setAccessFailure(mailbox.email, kind);
             console.log({ event: "watch_renewal_failed", email: mailbox.email, kind, err: String(err) });
-            const chatId = await getChatIdByMailboxId(mailbox.id);
-            if (chatId === null)
-                continue;
             const text = kind === "expired"
                 ? MESSAGE_WATCH_EXPIRED(mailbox.email)
                 : MESSAGE_WATCH_RENEW_ERROR(mailbox.email);
-            sendMessage(parseInt(chatId, 10), text).catch((sendErr) => console.log(sendErr));
+            await notifyMailboxOwner(mailbox.id, text);
         }
     }
 }
