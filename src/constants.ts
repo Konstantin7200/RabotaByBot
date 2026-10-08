@@ -18,6 +18,8 @@ export const MESSAGE_WATCH_EXPIRED=(email:string)=>
     `Google login for ${email} has expired.\nRun /start to link the mailbox again`;
 export const MESSAGE_WATCH_RENEW_ERROR=(email:string)=>
     `Could not renew tracking for ${email} (Google API error).\nRun /start to re-link if it persists`;
+export const MESSAGE_MAIL_PROCESSING_ERROR=(email:string)=>
+    `Could not process new mail for ${email} (Google API error).\nRun /start to re-link if it persists`;
 export const MESSAGE_FOR_NO_MAILBOX_CONNECTED='No mailbox is connected right now run.\nRun /start to connect one';
 export const MESSAGE_FOR_UNLINK_CONFIRMATION=(email:string,scopes:string)=>
     `Mailbox ${email} has been unlinked.\nWatch stopped, access revoked (${scopes}).\nRun /start to connect a mailbox again`;
