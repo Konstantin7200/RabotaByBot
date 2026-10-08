@@ -15,6 +15,12 @@ describe("classifySendError", () => {
     it("classifies grammY 403 as blocked", () => {
         expect(classifySendError(tgError({ errorCode: 403 }))).toBe("blocked");
     });
+    it("classifies numeric code 403 as blocked", () => {
+        expect(classifySendError(tgError({ code: 403 }))).toBe("blocked");
+    });
+    it("classifies response status 403 as blocked", () => {
+        expect(classifySendError(tgError({ responseStatus: 403 }))).toBe("blocked");
+    });
     it("classifies 429 as retryable", () => {
         expect(classifySendError(tgError({ errorCode: 429 }))).toBe("retryable");
     });
