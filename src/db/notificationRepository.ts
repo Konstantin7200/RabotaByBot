@@ -43,7 +43,14 @@ export async function recordFailure(id: number, error: string) {
     if (notif === undefined || notif.status !== 'pending')
         return;
     const state = nextFailureState(notif, error, new Date());
-    await db.update(notificationsTable).set(state).where(eq(notificationsTable.id, id));
+    const updateBody: Partial<InsertedNotification> = {
+        lastError: state.lastError,
+        attempts: state.attempts,
+        nextAttemptAt: state.nextAttemptAt,
+    }
+    if (state.status !== notif.status)
+        updateBody.status = state.status;
+    await db.update(notificationsTable).set(updateBody).where(eq(notificationsTable.id, id));
 }
 
 export async function markStaleAsSent() {
