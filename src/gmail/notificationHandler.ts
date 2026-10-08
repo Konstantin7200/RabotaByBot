@@ -3,10 +3,9 @@ import { isNotificationMessageBody } from "./validateNotificationBody";
 import { UnvalidatedNotificationBody, validateNotificationPayload } from "./validateNotificationPayload";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
-import { addNotifications, AddNotificationType } from "../db/notificationRepository";
+import { addNotifications, AddNotificationType, listByMessageIds } from "../db/notificationRepository";
 import { advanceBasis, getMailbox } from "../db/mailboxRepository";
-import { NotificationToSend, sendNotifications } from "../bot/sendNotifications";
-import { getChatIdByMailboxId } from "../db/userRepository";
+import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
 import { getUserGmailClient } from "./getUserGmailClient";
 
 
@@ -41,30 +40,23 @@ export async function notificationHandler(req: Request, res: Response) {
                 vacancy:val.vacancy||'Unknown',
                 employer:val.employer||'Unknown',
                 subject:val.subject||'Unknown',
+                outcome:val.outcome,
                 gmailMessageId:val.gmailMessageId,
                 mailboxId:mailbox.id
             }
         })
         await addNotifications(notifications);
+        const rows=await listByMessageIds(mailbox.id,messageData.map((m)=>m.gmailMessageId));
         await advanceBasis(mailbox.id,newHistoryId);
+        if(rows.length===0){
+            res.status(200).send();
+            return;
+        }
+        const outcome=await deliverBatchUntilTerminal(rows.map((r)=>r.id));
+        res.status(outcome==='terminal'?200:503).send();
     }
     catch(err){
         console.log(err);
         return res.status(500).send();
     }
-    const rawChatId=await getChatIdByMailboxId(mailbox.id);
-    if(rawChatId===null)
-    {
-        throw new Error('Mailbox not found');
-    }
-    const numChatId=parseInt(rawChatId,10);
-    const notificationsToSend:NotificationToSend[]=messageData.map((val)=>{
-        return {
-            vacancy:val.vacancy||'Unknown',
-            employer:val.employer||'Unknown',
-            outcome:(val.subject||'Unknown') as 'Accepted'|'Rejected'|'Unknown',
-        }
-    })
-    await sendNotifications(numChatId,notificationsToSend);
-    res.status(200).send();
 }

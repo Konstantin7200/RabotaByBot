@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, lt, lte } from "drizzle-orm";
+import { and, count, desc, eq, gt, inArray, lt, lte } from "drizzle-orm";
 import { db } from ".";
 import { InsertedNotification } from "./entityTypes";
 import { notificationsTable } from "./schema";
@@ -29,6 +29,15 @@ export async function addNotifications(values: AddNotificationType[]) {
     })
     const rows = await db.insert(notificationsTable).values(valuesForDb).onConflictDoNothing().returning();
     return rows.length > 0 ? rows[0] : null;
+}
+export async function listByMessageIds(mailboxId: number, gmailMessageIds: string[]) {
+    return db.select().from(notificationsTable).where(and(
+        eq(notificationsTable.mailboxId, mailboxId),
+        inArray(notificationsTable.gmailMessageId, gmailMessageIds),
+    ));
+}
+export async function getByIds(ids: number[]) {
+    return db.select().from(notificationsTable).where(inArray(notificationsTable.id, ids));
 }
 export async function setNotificationDelivered(gmailMessageId: string, mailboxId: number) {
     await db.update(notificationsTable).set({ status: 'sent', sentAt: new Date() }).where(and(
