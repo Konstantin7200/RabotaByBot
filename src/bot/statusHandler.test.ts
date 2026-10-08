@@ -25,11 +25,11 @@ describe("createStatusMessage", () => {
     it("warns about undelivered notifications with the last error (FR-11/US-2)", () => {
         const msg = createStatusMessage(base, "a@b.c", base, "active", false,
             { stuckCount: 2, lastFailure: { lastError: "Forbidden: bot was blocked", attempts: 5 } });
-        expect(msg).toContain("2");
+        expect(msg).toContain("2 notification(s)");
         expect(msg).toContain("Forbidden: bot was blocked");
     });
     it("shows no delivery warning when everything is healthy", () => {
         expect(createStatusMessage(base, "a@b.c", base, "active", false, clean))
-            .not.toContain("Delivery problems");
+            .not.toContain("delivery problems");
     });
 });
