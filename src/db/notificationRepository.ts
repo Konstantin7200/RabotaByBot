@@ -2,7 +2,8 @@ import { and, count, desc, eq, gt, lt, lte } from "drizzle-orm";
 import { db } from ".";
 import { InsertedNotification } from "./entityTypes";
 import { notificationsTable } from "./schema";
-import { BACKOFF_MULT, BACKOFF_VALUE_MS, MAX_NOTIFICATION_ATTEMPTS, STALE_PENDING_MS } from "../constants";
+import { STALE_PENDING_MS } from "../constants";
+import { nextFailureState } from "./notificationFailureState";
 
 export type AddNotificationType = Omit<InsertedNotification, 'status' | 'attempts' | 'nextAttemptAt' | 'createdAt'>
 export async function addNotification(val: AddNotificationType) {
@@ -41,15 +42,8 @@ export async function recordFailure(id: number, error: string) {
     const notif = data[0];
     if (notif === undefined || notif.status !== 'pending')
         return;
-    const newAttempts = notif.attempts + 1;
-    const updateBody: Partial<InsertedNotification> = {
-        lastError: error,
-        attempts: newAttempts,
-        nextAttemptAt: new Date(Date.now() + BACKOFF_VALUE_MS * Math.pow(BACKOFF_MULT, notif.attempts)),
-    }
-    if (newAttempts >= MAX_NOTIFICATION_ATTEMPTS)
-        updateBody.status = 'failed';
-    await db.update(notificationsTable).set(updateBody).where(eq(notificationsTable.id, id));
+    const state = nextFailureState(notif, error, new Date());
+    await db.update(notificationsTable).set(state).where(eq(notificationsTable.id, id));
 }
 
 export async function markStaleAsSent() {
