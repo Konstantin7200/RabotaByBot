@@ -28,3 +28,6 @@ export const createReplacedMailboxMessage=(oldEmail:string,newEmail:string)=>
 export const MESSAGE_FOR_AUTH_CANCELLED='Authorization was cancelled.\nRun /start to try again';
 export const MESSAGE_FOR_AUTH_FAILED='Something went wrong while linking your mailbox.\nRun /start to try again';
 export const REVOKED_SCOPES='openid, userinfo.email, gmail.readonly';
+export const MESSAGE_CHAT_BLOCKED='Warning: the bot was blocked in this chat.\nNotifications cannot be delivered until it is unblocked';
+export const createDeliveryProblemsWarning=(stuckCount:number,lastError:string|null,attempts:number)=>
+    `Warning: delivery problems: ${stuckCount} notification(s) not delivered yet; last error after ${attempts} attempt(s): ${lastError??'unknown'}`;
