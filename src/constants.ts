@@ -8,6 +8,12 @@ export const MAX_NOTIFICATION_ATTEMPTS=5;
 export const STALE_PENDING_MS=5*60*1000;
 export const KEY_EXPIRE_MS=5*60*1000;
 export const TOKEN_EXPIRE_MS=7*24*60*60*1000;
+export const WATCH_RENEWAL_TICK="*/30 * * * *";
+export const WATCH_RENEWAL_THRESHOLD_MS=24*60*60*1000;
+export const MESSAGE_WATCH_EXPIRED=(email:string)=>
+    `Google login for ${email} has expired.\nRun /start to link the mailbox again`;
+export const MESSAGE_WATCH_RENEW_ERROR=(email:string)=>
+    `Could not renew tracking for ${email} (Google API error).\nRun /start to re-link if it persists`;
 export const MESSAGE_FOR_NO_MAILBOX_CONNECTED='No mailbox is connected right now run.\nRun /start to connect one';
 export const MESSAGE_FOR_UNLINK_CONFIRMATION=(email:string,scopes:string)=>
     `Mailbox ${email} has been unlinked.\nWatch stopped, access revoked (${scopes}).\nRun /start to connect a mailbox again`;

@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from ".";
-import { InsertedMailbox } from "./entityTypes";
+import { InsertedMailbox, MailboxesTable } from "./entityTypes";
 import { accessStatusEnum, mailboxesTable, usersTable } from "./schema";
 
 type CreatedMailbox=Omit<InsertedMailbox,'linkedAt'|'tokenGrantedAt'|'accessStatus'|'historyIdBasis'|'watchExpiration'>
@@ -54,7 +54,11 @@ export async function getMailboxByChatId(chatId:string) {
 }
 
 export async function setWatchSuccess(email:string,historyIdBasis:string,watchExpiration:Date) {
-    await db.update(mailboxesTable).set({historyIdBasis,watchExpiration,accessStatus:'active'}).where(eq(mailboxesTable.email,email));
+    await db.update(mailboxesTable).set({
+        historyIdBasis:sql`COALESCE(${mailboxesTable.historyIdBasis}, ${historyIdBasis})`,
+        watchExpiration,
+        accessStatus:'active'
+    }).where(eq(mailboxesTable.email,email));
 }
 
 type AccessFailureStatus=Exclude<typeof accessStatusEnum.enumValues[number],'active'|'unlinked'>
@@ -77,4 +81,12 @@ export async function listActive() {
         mailbox: mailboxesTable,
         chatId: usersTable.chatId,
     }).from(mailboxesTable).innerJoin(usersTable,eq(mailboxesTable.userId,usersTable.id)).where(eq(mailboxesTable.accessStatus,'active'));
+}
+
+export async function listDueForRenewal(threshold:Date):Promise<MailboxesTable[]> {
+    return db.select().from(mailboxesTable).where(and(
+        eq(mailboxesTable.accessStatus,'active'),
+        isNotNull(mailboxesTable.refreshToken),
+        or(isNull(mailboxesTable.watchExpiration),lt(mailboxesTable.watchExpiration,threshold)),
+    ));
 }

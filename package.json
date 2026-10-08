@@ -33,6 +33,7 @@
   "homepage": "https://github.com/Konstantin7200/RabotaByBot#readme",
   "dependencies": {
     "@googleapis/gmail": "^22.0.1",
+    "croner": "^10.0.1",
     "dotenv": "^18.0.4",
     "drizzle-orm": "^0.45.3",
     "email-addresses": "^5.0.0",

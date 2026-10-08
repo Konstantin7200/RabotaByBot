@@ -1,6 +1,7 @@
 import { EnvConfig } from "../config";
 import { setWatchSuccess } from "../db/mailboxRepository";
 import { getUserGmailClient } from "./getUserGmailClient";
+import { parseExpiration } from "./parseExpiration";
 
 export async function watch(email:string,refresh_token:string,access_token?:string){
     const gmail=getUserGmailClient(refresh_token,access_token);
@@ -15,5 +16,6 @@ export async function watch(email:string,refresh_token:string,access_token?:stri
         throw new Error('History id is undefined');
     if(typeof expiration!=='string')
         throw new Error('Expiration is undefined');
-    await setWatchSuccess(email,historyId,new Date(expiration));
+    await setWatchSuccess(email,historyId,parseExpiration(expiration));
+    return {historyId,expiration};
 }

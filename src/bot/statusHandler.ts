@@ -14,9 +14,12 @@ export async function statusHandler(ctx:Context){
     const email=mailbox.email;
     const tokenExpiresAt=mailbox.tokenGrantedAt?new Date(mailbox.tokenGrantedAt.getTime()+TOKEN_EXPIRE_MS).toUTCString():'Expired';
 
-    sendMessage(chatId,createStatusMessage(watchExpiration,email,tokenExpiresAt));
+    sendMessage(chatId,createStatusMessage(watchExpiration,email,tokenExpiresAt,mailbox.accessStatus));
 }
 
-function createStatusMessage(watchExpiration:string,email:string,tokenExpiresAt:string){
-    return `Email:${email}\nWatch expiration:${watchExpiration} UTC\nToken Expiration:${tokenExpiresAt} UTC`;
+function createStatusMessage(watchExpiration:string,email:string,tokenExpiresAt:string,accessStatus:string){
+    const warning=accessStatus==='active'
+        ? ''
+        : `\nWarning: tracking is stopped (${accessStatus}).\nRun /start to re-link the mailbox`;
+    return `Email:${email}\nWatch expiration:${watchExpiration} UTC\nToken Expiration:${tokenExpiresAt} UTC${warning}`;
 }
