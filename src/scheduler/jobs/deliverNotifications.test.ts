@@ -50,4 +50,12 @@ describe("runDeliveryPass", () => {
         await Promise.all([first, second]);
         expect(claimDueRetries).toHaveBeenCalledTimes(1);
     });
+
+    it("re-arms the mutex after a rejected pass settles", async () => {
+        vi.mocked(markStaleAsSent).mockRejectedValueOnce(new Error("db down"));
+        await expect(runDeliveryPass()).rejects.toThrow("db down");
+        await runDeliveryPass();
+        expect(markStaleAsSent).toHaveBeenCalledTimes(2);
+        expect(claimDueRetries).toHaveBeenCalledTimes(1);
+    });
 });
