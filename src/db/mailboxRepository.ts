@@ -30,6 +30,7 @@ export async function createMailbox(value:CreatedMailbox){
             tokenGrantedAt: valueForDb.tokenGrantedAt,
             accessStatus: 'active',
             linkedAt: valueForDb.linkedAt,
+            tokenExpiryWarnedAt: null,
         },
     });
 }
@@ -44,6 +45,9 @@ export async function unlinkMailbox(userId:number) {
         watchExpiration:null,
         watchRenewedAt:null,
         tokenGrantedAt:null,
+        tokenExpiryWarnedAt:null,
+        consecutiveTransientFailures:0,
+        failureNotifiedAt:null,
         historyIdBasis:null,
         historyIdBasisAt:null
     }
@@ -124,4 +128,57 @@ export async function listDueForRenewal(threshold:Date):Promise<MailboxesTable[]
         ),
     ));
     return rows.map(decryptRow);
+}
+
+// US-8: active mailboxes whose grant is still unexpired and has no
+// "login expires soon" notice for the current grant yet.
+export async function listDueForTokenExpiryWarning():Promise<MailboxesTable[]> {
+    const rows=await db.select().from(mailboxesTable).where(and(
+        eq(mailboxesTable.accessStatus,'active'),
+        isNotNull(mailboxesTable.refreshToken),
+        isNotNull(mailboxesTable.tokenGrantedAt),
+        isNull(mailboxesTable.tokenExpiryWarnedAt),
+    ));
+    return rows.map(decryptRow);
+}
+
+export async function markTokenExpiryWarned(id:number) {
+    await db.update(mailboxesTable).set({tokenExpiryWarnedAt:new Date()}).where(eq(mailboxesTable.id,id));
+}
+
+// US-9: increments the consecutive transient-failure counter atomically and
+// returns the new value.
+export async function registerTransientFailure(id:number):Promise<number> {
+    const rows=await db.update(mailboxesTable)
+        .set({consecutiveTransientFailures:sql`${mailboxesTable.consecutiveTransientFailures} + 1`})
+        .where(eq(mailboxesTable.id,id))
+        .returning({value:mailboxesTable.consecutiveTransientFailures});
+    return rows[0]?.value??0;
+}
+
+// US-9: one-shot claim of the right to send the persistent-failure notice.
+export async function claimFailureNotice(id:number):Promise<boolean> {
+    const rows=await db.update(mailboxesTable)
+        .set({failureNotifiedAt:new Date()})
+        .where(and(eq(mailboxesTable.id,id),isNull(mailboxesTable.failureNotifiedAt)))
+        .returning({value:mailboxesTable.id});
+    return rows.length>0;
+}
+
+// US-10: resets the failure streak; returns true when a persistent-failure
+// notice had been sent, i.e. the owner is owed a "working again" message.
+export async function registerPipelineSuccess(id:number):Promise<boolean> {
+    const current=await db.select({
+        notified:mailboxesTable.failureNotifiedAt,
+        failures:mailboxesTable.consecutiveTransientFailures,
+    }).from(mailboxesTable).where(eq(mailboxesTable.id,id)).limit(1);
+    const hadNotice=current[0]?.notified??null;
+    if(current.length===0)
+        return false;
+    if(hadNotice===null&&current[0].failures===0)
+        return false;
+    await db.update(mailboxesTable)
+        .set({consecutiveTransientFailures:0,failureNotifiedAt:null})
+        .where(eq(mailboxesTable.id,id));
+    return hadNotice!==null;
 }

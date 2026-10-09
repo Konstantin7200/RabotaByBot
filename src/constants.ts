@@ -16,6 +16,9 @@ export const WATCH_RENEWAL_MIN_INTERVAL_MS=24*60*60*1000;
 export const DELIVERY_TICK="*/10 * * * * *";
 export const CATCHUP_TICK="0 3 * * *";
 export const WATCH_RENEWAL_THRESHOLD_MS=24*60*60*1000;
+export const TOKEN_EXPIRY_WARNING_MS=24*60*60*1000;
+export const TOKEN_EXPIRY_WARN_TICK='0 * * * *';
+export const PERSISTENT_FAILURE_THRESHOLD=3;
 export const MESSAGE_WATCH_EXPIRED=(email:string)=>
     `Google login for ${email} has expired.\nRun /start to link the mailbox again`;
 export const MESSAGE_WATCH_RENEW_ERROR=(email:string)=>
@@ -44,6 +47,12 @@ export const MESSAGE_FOR_AUTH_CANCELLED='Authorization was cancelled.\nRun /star
 export const MESSAGE_FOR_AUTH_FAILED='Something went wrong while linking your mailbox.\nRun /start to try again';
 export const REVOKED_SCOPES='openid, userinfo.email, gmail.readonly';
 export const MESSAGE_CHAT_BLOCKED='Warning: the bot was blocked in this chat.\nNotifications cannot be delivered until it is unblocked';
+export const MESSAGE_LOGIN_EXPIRING_SOON=(email:string,expiresAt:Date)=>
+    `Warning: the Google login for ${email} expires soon (${expiresAt.toUTCString()}).\nRun /start to renew it before tracking stops`;
+export const MESSAGE_PERSISTENT_FAILURE=(email:string)=>
+    `Mail tracking for ${email} keeps failing.\nRun /status for details, or /start to re-link the mailbox`;
+export const MESSAGE_DELIVERY_RESTORED=(email:string)=>
+    `Mail tracking for ${email} is working again`;
 export const createDeliveryProblemsWarning=(stuckCount:number,lastError:string|null,attempts:number)=>{
     const stuck=stuckCount>0?`${stuckCount} notification(s) not delivered yet; `:'';
     return `Warning: delivery problems: ${stuck}last error after ${attempts} attempt(s): ${lastError??'unknown'}`;

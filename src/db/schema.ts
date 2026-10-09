@@ -42,6 +42,12 @@ export const mailboxesTable = pgTable("mailboxes", {
     historyIdBasis: text(),
     historyIdBasisAt: timestamp({ withTimezone: true }),
     lastDeliveredAt: timestamp({ withTimezone: true }),
+    // US-8: set once the "login expires soon" notice has been sent for this grant.
+    tokenExpiryWarnedAt: timestamp({ withTimezone: true }),
+    // US-9/US-10: consecutive transient failures of the mailbox pipeline; a
+    // persistent-failure notice is sent when the counter reaches the threshold.
+    consecutiveTransientFailures: integer().notNull().default(0),
+    failureNotifiedAt: timestamp({ withTimezone: true }),
     accessStatus: accessStatusEnum("accessStatus").notNull().default("unlinked"),
     linkedAt: timestamp({ withTimezone: true }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

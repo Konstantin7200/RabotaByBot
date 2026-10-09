@@ -1,9 +1,10 @@
 import { Cron } from "croner";
-import { CATCHUP_TICK, DELIVERY_TICK, HEARTBEAT_TICK, WATCH_RENEWAL_TICK } from "../constants";
+import { CATCHUP_TICK, DELIVERY_TICK, HEARTBEAT_TICK, TOKEN_EXPIRY_WARN_TICK, WATCH_RENEWAL_TICK } from "../constants";
 import { renewWatches } from "./jobs/renewWatches";
 import { runDeliveryPass } from "./jobs/deliverNotifications";
 import { runCatchUpPass } from "./jobs/catchUpPass";
 import { heartbeat } from "./jobs/heartbeat";
+import { warnTokenExpiry } from "./jobs/warnTokenExpiry";
 
 const jobs: Cron[] = [];
 
@@ -48,6 +49,16 @@ export function startScheduler() {
     }, heartbeat);
     jobs.push(heartbeatJob);
     heartbeatJob.trigger();
+    const tokenExpiryJob = new Cron(TOKEN_EXPIRY_WARN_TICK, {
+        protect: () => {
+            console.log({ event: "job_skipped_overlap", job: "warn_token_expiry" });
+        },
+        catch: (err) => {
+            console.log({ event: "job_error", job: "warn_token_expiry", err: String(err) });
+        },
+    }, warnTokenExpiry);
+    jobs.push(tokenExpiryJob);
+    tokenExpiryJob.trigger();
     console.log({
         event: "scheduler_started",
         job: "renew_watches",
@@ -71,6 +82,12 @@ export function startScheduler() {
         job: "heartbeat",
         tick: HEARTBEAT_TICK,
         nextRun: heartbeatJob.nextRun(),
+    });
+    console.log({
+        event: "scheduler_started",
+        job: "warn_token_expiry",
+        tick: TOKEN_EXPIRY_WARN_TICK,
+        nextRun: tokenExpiryJob.nextRun(),
     });
 }
 

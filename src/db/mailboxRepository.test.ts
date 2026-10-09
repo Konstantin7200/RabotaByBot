@@ -6,8 +6,9 @@ type Capture = {
     selectedRow: Record<string, unknown> | null;
     inserted: Record<string, unknown> | null;
     selectWhere: unknown;
+    updateRows: Record<string, unknown>[];
 };
-const captured: Capture = { updated: false, selectedBasis: null, selectedRow: null, inserted: null, selectWhere: null };
+const captured: Capture = { updated: false, selectedBasis: null, selectedRow: null, inserted: null, selectWhere: null, updateRows: [] };
 
 vi.mock("./index", () => {
     const updateChain = {
@@ -16,7 +17,17 @@ vi.mock("./index", () => {
         },
         where() {
             captured.updated = true;
-            return Promise.resolve([]);
+            return {
+                returning() {
+                    return Promise.resolve(captured.updateRows);
+                },
+                then(
+                    resolve: (value: unknown) => void,
+                    reject: (reason: unknown) => void,
+                ) {
+                    Promise.resolve(captured.updateRows).then(resolve, reject);
+                },
+            };
         },
     };
     function rowsForSelect() {
@@ -64,7 +75,7 @@ vi.mock("./index", () => {
     };
 });
 
-import { advanceBasis, createMailbox, getMailbox, listDueForRenewal } from "./mailboxRepository";
+import { advanceBasis, claimFailureNotice, createMailbox, getMailbox, listDueForRenewal, listDueForTokenExpiryWarning, registerPipelineSuccess, registerTransientFailure } from "./mailboxRepository";
 import { encryptSecret } from "./secretBox";
 import { PgDialect } from "drizzle-orm/pg-core";
 
@@ -76,6 +87,7 @@ beforeEach(() => {
     captured.selectedRow = null;
     captured.inserted = null;
     captured.selectWhere = null;
+    captured.updateRows = [];
     process.env.TOKEN_ENCRYPTION_KEY = KEY;
 });
 
@@ -146,5 +158,50 @@ describe("listDueForRenewal (FR-10)", () => {
         const sqlText = new PgDialect().sqlToQuery(captured.selectWhere as never).sql;
         expect(sqlText).toContain("watchRenewedAt");
         expect(sqlText).toContain("watchExpiration");
+    });
+});
+
+describe("token expiry warning candidates (US-8)", () => {
+    it("only selects active mailboxes with an unwarmed grant", async () => {
+        await listDueForTokenExpiryWarning();
+        const sqlText = new PgDialect().sqlToQuery(captured.selectWhere as never).sql;
+        expect(sqlText).toContain("tokenExpiryWarnedAt");
+        expect(sqlText).toContain("tokenGrantedAt");
+        expect(sqlText).toContain("accessStatus");
+    });
+});
+
+describe("persistent failure tracking (US-9/US-10)", () => {
+    it("registerTransientFailure returns the incremented counter", async () => {
+        captured.updateRows = [{ value: 3 }];
+        await expect(registerTransientFailure(7)).resolves.toBe(3);
+        expect(captured.updated).toBe(true);
+    });
+
+    it("claimFailureNotice is granted only when no notice was sent yet", async () => {
+        captured.updateRows = [{ value: 7 }];
+        await expect(claimFailureNotice(7)).resolves.toBe(true);
+        captured.updateRows = [];
+        await expect(claimFailureNotice(7)).resolves.toBe(false);
+    });
+
+    it("registerPipelineSuccess reports owed only after a sent notice", async () => {
+        captured.selectedRow = { notified: null, failures: 0 };
+        await expect(registerPipelineSuccess(7)).resolves.toBe(false);
+        expect(captured.updated).toBe(false);
+
+        captured.selectedRow = { notified: null, failures: 2 };
+        await expect(registerPipelineSuccess(7)).resolves.toBe(false);
+        expect(captured.updated).toBe(true);
+
+        captured.selectedRow = { notified: new Date(), failures: 3 };
+        await expect(registerPipelineSuccess(7)).resolves.toBe(true);
+        expect(captured.updated).toBe(true);
+    });
+
+    it("registerPipelineSuccess is a no-op for an unknown mailbox", async () => {
+        captured.selectedRow = null;
+        await expect(registerPipelineSuccess(7)).resolves.toBe(false);
+        expect(captured.updated).toBe(false);
     });
 });
