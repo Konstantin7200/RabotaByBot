@@ -3,6 +3,7 @@ import { renderNotification } from "./renderNotification";
 import { sendMessage } from "./sendMessage";
 import { Notification } from "../db/entityTypes";
 import { recordFailure, setNotificationDelivered } from "../db/notificationRepository";
+import { setLastDeliveredAt } from "../db/mailboxRepository";
 import { getChatIdByMailboxId, setChatStatus } from "../db/userRepository";
 
 export async function deliverNotification(notification: Notification): Promise<void> {
@@ -27,5 +28,6 @@ export async function deliverNotification(notification: Notification): Promise<v
         return;
     }
     await setNotificationDelivered(notification.gmailMessageId, notification.mailboxId);
+    await setLastDeliveredAt(notification.mailboxId, new Date());
     await setChatStatus(chatId, "ok");
 }

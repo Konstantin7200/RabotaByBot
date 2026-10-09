@@ -32,7 +32,8 @@ export async function unlinkMailbox(userId:number) {
         userId:null,
         watchExpiration:null,
         tokenGrantedAt:null,
-        historyIdBasis:null
+        historyIdBasis:null,
+        historyIdBasisAt:null
     }
     const rows=await db.update(mailboxesTable).set(updateValue).where(eq(mailboxesTable.userId,userId)).returning();
     return rows.length>0?rows[0]:null;
@@ -56,6 +57,7 @@ export async function getMailboxByChatId(chatId:string) {
 export async function setWatchSuccess(email:string,historyIdBasis:string,watchExpiration:Date) {
     await db.update(mailboxesTable).set({
         historyIdBasis:sql`COALESCE(${mailboxesTable.historyIdBasis}, ${historyIdBasis})`,
+        historyIdBasisAt: sql`COALESCE(${mailboxesTable.historyIdBasisAt}, CASE WHEN ${mailboxesTable.historyIdBasis} IS NULL THEN CURRENT_TIMESTAMP ELSE NULL END)`,
         watchExpiration,
         accessStatus:'active'
     }).where(eq(mailboxesTable.email,email));
@@ -72,8 +74,10 @@ export async function setLastDeliveredAt(id:number,lastDeliveredAt:Date) {
 
 // Call only after all notification inserts of this batch are durable:
 // basis must never advance past messages that have no journal row yet.
+// historyIdBasisAt is stamped together with the basis so the wall-clock time
+// always matches the basis write it accompanies.
 export async function advanceBasis(id:number,historyIdBasis:string) {
-    await db.update(mailboxesTable).set({historyIdBasis}).where(eq(mailboxesTable.id,id));
+    await db.update(mailboxesTable).set({historyIdBasis, historyIdBasisAt:new Date()}).where(eq(mailboxesTable.id,id));
 }
 
 export async function listActive() {

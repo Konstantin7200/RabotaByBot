@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("./sendMessage", () => ({ sendMessage: vi.fn() }));
 vi.mock("../db/notificationRepository", () => ({ setNotificationDelivered: vi.fn(), recordFailure: vi.fn() }));
 vi.mock("../db/userRepository", () => ({ getChatIdByMailboxId: vi.fn(), setChatStatus: vi.fn() }));
+vi.mock("../db/mailboxRepository", () => ({ setLastDeliveredAt: vi.fn() }));
 
 import { deliverNotification } from "./deliverNotification";
 import { sendMessage } from "./sendMessage";
 import { recordFailure, setNotificationDelivered } from "../db/notificationRepository";
 import { getChatIdByMailboxId, setChatStatus } from "../db/userRepository";
+import { setLastDeliveredAt } from "../db/mailboxRepository";
 
 const row = {
     id: 7, mailboxId: 3, gmailMessageId: "m1", status: "pending" as const, attempts: 0,
@@ -29,6 +31,9 @@ describe("deliverNotification", () => {
         // send strictly precedes the `sent` write (FR-11/FR-7)
         expect(vi.mocked(sendMessage).mock.invocationCallOrder[0])
             .toBeLessThan(vi.mocked(setNotificationDelivered).mock.invocationCallOrder[0]);
+        expect(setLastDeliveredAt).toHaveBeenCalledWith(3, expect.any(Date));
+        expect(vi.mocked(setNotificationDelivered).mock.invocationCallOrder[0])
+            .toBeLessThan(vi.mocked(setLastDeliveredAt).mock.invocationCallOrder[0]);
     });
 
     it("records a failure without a sent write on transient errors", async () => {

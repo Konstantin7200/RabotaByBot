@@ -17,7 +17,7 @@ export async function addNotification(val: AddNotificationType) {
     const rows = await db.insert(notificationsTable).values(valForDb).onConflictDoNothing().returning();
     return rows.length > 0 ? rows[0] : null;
 }
-export async function addNotifications(values: AddNotificationType[]) {
+export async function addNotifications(values: AddNotificationType[]): Promise<number> {
     const valuesForDb: InsertedNotification[] = values.map((val) => {
         return {
             ...val,
@@ -28,7 +28,7 @@ export async function addNotifications(values: AddNotificationType[]) {
         }
     })
     const rows = await db.insert(notificationsTable).values(valuesForDb).onConflictDoNothing().returning();
-    return rows.length > 0 ? rows[0] : null;
+    return rows.length;
 }
 export async function listByMessageIds(mailboxId: number, gmailMessageIds: string[]) {
     return db.select().from(notificationsTable).where(and(
