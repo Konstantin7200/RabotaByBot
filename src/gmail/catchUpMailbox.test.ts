@@ -120,15 +120,26 @@ describe("catchUpMailbox — messages.list fallback on stale history id", () => 
         expect(result).toMatchObject({ outcome: "ok", source: "messages_fallback" });
     });
 
-    it("falls back to epoch when the basis timestamp is missing (legacy row)", async () => {
+    it("falls back to the last delivery time when the basis timestamp is missing", async () => {
         vi.mocked(getMessageIds).mockRejectedValue(notFound);
-        await catchUpMailbox({ ...mailbox, historyIdBasisAt: null } as never);
-        expect(listMessageIdsSince).toHaveBeenCalledWith(gmail, "a@b.c", 0);
+        const deliveredAt = new Date("2026-10-05T00:00:00.000Z");
+        await catchUpMailbox({ ...mailbox, historyIdBasisAt: null, lastDeliveredAt: deliveredAt } as never);
+        expect(listMessageIdsSince)
+            .toHaveBeenCalledWith(gmail, "a@b.c", Math.floor(deliveredAt.getTime() / 1000) - 1);
     });
 
-    it("scans from epoch when both timestamps are missing", async () => {
+    it("falls back to the grant time when neither basis nor delivery timestamps exist", async () => {
         vi.mocked(getMessageIds).mockRejectedValue(notFound);
-        await catchUpMailbox({ ...mailbox, historyIdBasisAt: null, tokenGrantedAt: null } as never);
+        await catchUpMailbox({ ...mailbox, historyIdBasisAt: null, lastDeliveredAt: null } as never);
+        expect(listMessageIdsSince)
+            .toHaveBeenCalledWith(gmail, "a@b.c", Math.floor(GRANTED_AT.getTime() / 1000) - 1);
+    });
+
+    it("scans from epoch only when every timestamp is missing", async () => {
+        vi.mocked(getMessageIds).mockRejectedValue(notFound);
+        await catchUpMailbox({
+            ...mailbox, historyIdBasisAt: null, lastDeliveredAt: null, tokenGrantedAt: null,
+        } as never);
         expect(listMessageIdsSince).toHaveBeenCalledWith(gmail, "a@b.c", 0);
     });
 

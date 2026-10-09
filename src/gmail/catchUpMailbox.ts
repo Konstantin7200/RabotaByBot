@@ -52,7 +52,9 @@ async function ingestAndDeliver(
 }
 
 async function runFallbackPass(gmail: gmail_v1.Gmail, mailbox: MailboxesTable): Promise<CatchUpResult> {
-    const since = mailbox.historyIdBasisAt ?? new Date(0);
+    // FR-14: never earlier than the current basis; if nothing was delivered
+    // yet, fall back to the time access was granted.
+    const since = mailbox.historyIdBasisAt ?? mailbox.lastDeliveredAt ?? mailbox.tokenGrantedAt ?? new Date(0);
     const afterUnixSeconds = Math.max(0, Math.floor(since.getTime() / 1000) - 1);
     const ids = await listMessageIdsSince(gmail, mailbox.email, afterUnixSeconds);
     const profile = await gmail.users.getProfile({ userId: mailbox.email });
