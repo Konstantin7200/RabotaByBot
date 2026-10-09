@@ -56,6 +56,7 @@ export async function notificationHandler(req: Request, res: Response) {
                     vacancy:val.vacancy||'Unknown',
                     employer:val.employer||'Unknown',
                     subject:val.subject||'Unknown',
+                    fromHeader:val.fromHeader,
                     outcome:val.outcome,
                     gmailMessageId:val.gmailMessageId,
                     mailboxId:mailbox.id
@@ -74,7 +75,7 @@ export async function notificationHandler(req: Request, res: Response) {
             res.status(outcome==='terminal'?200:503).send();
         }
         catch(err){
-            console.log(err);
+            console.log({ event: "push_batch_failed", email: decoded.emailAddress, err: String(err) });
             return res.status(500).send();
         }
     } catch (err) {

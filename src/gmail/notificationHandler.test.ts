@@ -35,6 +35,7 @@ const messageData = (gmailMessageId: string) => ({
     vacancy: "Developer",
     employer: "Employer",
     outcome: "applied",
+    fromHeader: "Rabota.by <noreply@rabota.by>",
 });
 
 function makeRequest() {

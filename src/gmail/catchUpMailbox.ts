@@ -35,6 +35,7 @@ async function ingestAndDeliver(
             vacancy: val.vacancy || "Unknown",
             employer: val.employer || "Unknown",
             subject: val.subject || "Unknown",
+            fromHeader: val.fromHeader,
             outcome: val.outcome,
             gmailMessageId: val.gmailMessageId,
             mailboxId: mailbox.id,

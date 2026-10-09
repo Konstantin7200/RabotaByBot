@@ -9,6 +9,7 @@ export interface MessageWithText {
     id: string;
     text: string | null;
     subject: string;
+    fromHeader: string | null;
 }
 
 async function validateMessages(gmail:gmail_v1.Gmail,messageIds: string[], email: string): Promise<string[]> {
@@ -41,7 +42,8 @@ async function getMessages(gmail:gmail_v1.Gmail,messageIds: string[], email: str
             userId: email
         });
         const subject=response.data.payload?.headers?.find(header => header.name?.toLowerCase() === "subject")?.value ?? 'Unknown';
-        messages.push({ id, text: messageBodyToText(response.data.payload),subject });
+        const from=response.data.payload?.headers?.find(header => header.name?.toLowerCase() === "from")?.value ?? null;
+        messages.push({ id, text: messageBodyToText(response.data.payload),subject,fromHeader:from });
     }
     return messages;
 }
@@ -49,6 +51,7 @@ async function getMessages(gmail:gmail_v1.Gmail,messageIds: string[], email: str
 export interface MessageData {
     gmailMessageId: string;
     subject: string;
+    fromHeader: string | null;
     vacancy: string | null;
     employer: string | null;
     outcome: string | null;
@@ -60,6 +63,7 @@ export async function getDataFromMessages(gmail:gmail_v1.Gmail,messageIds: strin
     return messages.map(message => ({
         gmailMessageId: message.id,
         subject: message.subject,
+        fromHeader: message.fromHeader,
         ...parseMessageFields(message.text, message.subject)
     }));
 }

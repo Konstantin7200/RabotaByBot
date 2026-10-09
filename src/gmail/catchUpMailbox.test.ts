@@ -36,6 +36,7 @@ const mailbox = {
 const gmail = { users: { getProfile: vi.fn() } };
 const messageData = (gmailMessageId: string) => ({
     gmailMessageId, subject: "S", vacancy: "Dev", employer: "ACME", outcome: "applied",
+    fromHeader: "Rabota.by <noreply@rabota.by>",
 });
 const notFound = Object.assign(new Error("not found"), { response: { status: 404 } });
 
