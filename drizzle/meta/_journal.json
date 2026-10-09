@@ -15,6 +15,13 @@
       "when": 1791543871349,
       "tag": "0001_easy_scarecrow",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791549500271,
+      "tag": "0002_bored_doorman",
+      "breakpoints": true
     }
   ]
 }
