@@ -38,6 +38,7 @@ export const mailboxesTable = pgTable("mailboxes", {
     refreshToken: text(),
     tokenGrantedAt: timestamp({ withTimezone: true }),
     watchExpiration: timestamp({ withTimezone: true }),
+    watchRenewedAt: timestamp({ withTimezone: true }),
     historyIdBasis: text(),
     historyIdBasisAt: timestamp({ withTimezone: true }),
     lastDeliveredAt: timestamp({ withTimezone: true }),

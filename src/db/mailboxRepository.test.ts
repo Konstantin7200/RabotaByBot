@@ -5,8 +5,9 @@ type Capture = {
     selectedBasis: string | null;
     selectedRow: Record<string, unknown> | null;
     inserted: Record<string, unknown> | null;
+    selectWhere: unknown;
 };
-const captured: Capture = { updated: false, selectedBasis: null, selectedRow: null, inserted: null };
+const captured: Capture = { updated: false, selectedBasis: null, selectedRow: null, inserted: null, selectWhere: null };
 
 vi.mock("./index", () => {
     const updateChain = {
@@ -18,17 +19,27 @@ vi.mock("./index", () => {
             return Promise.resolve([]);
         },
     };
+    function rowsForSelect() {
+        if (captured.selectedRow !== null)
+            return [captured.selectedRow];
+        return captured.selectedBasis === null ? [] : [{ basis: captured.selectedBasis }];
+    }
     const limitable = {
         async limit() {
-            if (captured.selectedRow !== null)
-                return [captured.selectedRow];
-            return captured.selectedBasis === null ? [] : [{ basis: captured.selectedBasis }];
+            return rowsForSelect();
+        },
+        then(
+            resolve: (value: unknown) => void,
+            reject: (reason: unknown) => void,
+        ) {
+            Promise.resolve(rowsForSelect()).then(resolve, reject);
         },
     };
     const selectChain = {
         from() {
             return {
-                where() {
+                where(expr: unknown) {
+                    captured.selectWhere = expr;
                     return limitable;
                 },
             };
@@ -53,8 +64,9 @@ vi.mock("./index", () => {
     };
 });
 
-import { advanceBasis, createMailbox, getMailbox } from "./mailboxRepository";
+import { advanceBasis, createMailbox, getMailbox, listDueForRenewal } from "./mailboxRepository";
 import { encryptSecret } from "./secretBox";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 const KEY = "c".repeat(64);
 
@@ -63,6 +75,7 @@ beforeEach(() => {
     captured.selectedBasis = null;
     captured.selectedRow = null;
     captured.inserted = null;
+    captured.selectWhere = null;
     process.env.TOKEN_ENCRYPTION_KEY = KEY;
 });
 
@@ -124,5 +137,14 @@ describe("refresh token encryption at rest (NFR)", () => {
         };
         const mailbox = await getMailbox("a@b.c");
         expect(mailbox?.refreshToken).toBeNull();
+    });
+});
+
+describe("listDueForRenewal (FR-10)", () => {
+    it("includes the daily-renewal clause keyed on watchRenewedAt", async () => {
+        await listDueForRenewal(new Date());
+        const sqlText = new PgDialect().sqlToQuery(captured.selectWhere as never).sql;
+        expect(sqlText).toContain("watchRenewedAt");
+        expect(sqlText).toContain("watchExpiration");
     });
 });

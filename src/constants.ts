@@ -12,6 +12,7 @@ export const BATCH_POLL_MAX_MS=30_000;
 export const KEY_EXPIRE_MS=5*60*1000;
 export const TOKEN_EXPIRE_MS=7*24*60*60*1000;
 export const WATCH_RENEWAL_TICK="*/30 * * * *";
+export const WATCH_RENEWAL_MIN_INTERVAL_MS=24*60*60*1000;
 export const DELIVERY_TICK="*/10 * * * * *";
 export const CATCHUP_TICK="0 3 * * *";
 export const WATCH_RENEWAL_THRESHOLD_MS=24*60*60*1000;

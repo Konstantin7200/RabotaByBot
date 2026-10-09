@@ -1,5 +1,6 @@
 import { and, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from ".";
+import { WATCH_RENEWAL_MIN_INTERVAL_MS } from "../constants";
 import { InsertedMailbox, MailboxesTable } from "./entityTypes";
 import { accessStatusEnum, mailboxesTable, usersTable } from "./schema";
 import { decryptTokenOrNull, encryptSecret } from "./secretBox";
@@ -41,6 +42,7 @@ export async function unlinkMailbox(userId:number) {
         refreshToken:null,
         userId:null,
         watchExpiration:null,
+        watchRenewedAt:null,
         tokenGrantedAt:null,
         historyIdBasis:null,
         historyIdBasisAt:null
@@ -69,6 +71,7 @@ export async function setWatchSuccess(email:string,historyIdBasis:string,watchEx
         historyIdBasis:sql`COALESCE(${mailboxesTable.historyIdBasis}, ${historyIdBasis})`,
         historyIdBasisAt: sql`COALESCE(${mailboxesTable.historyIdBasisAt}, CASE WHEN ${mailboxesTable.historyIdBasis} IS NULL THEN CURRENT_TIMESTAMP ELSE NULL END)`,
         watchExpiration,
+        watchRenewedAt: new Date(),
         accessStatus:'active'
     }).where(eq(mailboxesTable.email,email));
 }
@@ -109,10 +112,16 @@ export async function listActive() {
 }
 
 export async function listDueForRenewal(threshold:Date):Promise<MailboxesTable[]> {
+    const renewalIntervalAgo=new Date(Date.now()-WATCH_RENEWAL_MIN_INTERVAL_MS);
     const rows=await db.select().from(mailboxesTable).where(and(
         eq(mailboxesTable.accessStatus,'active'),
         isNotNull(mailboxesTable.refreshToken),
-        or(isNull(mailboxesTable.watchExpiration),lt(mailboxesTable.watchExpiration,threshold)),
+        or(
+            isNull(mailboxesTable.watchExpiration),
+            lt(mailboxesTable.watchExpiration,threshold),
+            isNull(mailboxesTable.watchRenewedAt),
+            lt(mailboxesTable.watchRenewedAt,renewalIntervalAgo),
+        ),
     ));
     return rows.map(decryptRow);
 }
