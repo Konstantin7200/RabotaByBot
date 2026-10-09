@@ -9,6 +9,6 @@ export async function notifyMailboxOwner(mailboxId: number, text: string): Promi
         await sendMessage(parseInt(chatId, 10), text);
     }
     catch (err) {
-        console.log(err);
+        console.log({ event: "owner_notify_failed", mailboxId, err: String(err) });
     }
 }

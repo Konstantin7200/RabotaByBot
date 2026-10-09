@@ -34,9 +34,6 @@ export async function createMailbox(value:CreatedMailbox){
         },
     });
 }
-export async function updateMailboxUserId(newUserId:number,email:string) {
-    await db.update(mailboxesTable).set({userId:newUserId}).where(eq(mailboxesTable.email,email));
-}
 export async function unlinkMailbox(userId:number) {
     const updateValue:Partial<InsertedMailbox>={
         accessStatus:'unlinked',

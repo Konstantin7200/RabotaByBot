@@ -6,14 +6,14 @@ import { getBot } from "./bot";
 import router from "./auth/routes";
 import { gmailRouter } from "./gmail/routes";
 import { PUBLIC_DIR } from "./constants";
-import { startScheduler, stopScheduler } from "./scheduler";
+import { startScheduler, stopScheduler, waitForIdleJobs } from "./scheduler";
 import { runCatchUpPass } from "./scheduler/jobs/catchUpPass";
 import { announceRestart } from "./startup/announceRestart";
 
 const app = express();
 
-app.get("/", (_req, res) => {
-  res.send("Hello World!");
+app.get("/health", (_req, res) => {
+  res.send("ok");
 });
 
 loadHandlers();
@@ -47,9 +47,11 @@ const server = app.listen(EnvConfig.port, async () => {
   startScheduler();
 });
 
-function shutdown(signal: string) {
+async function shutdown(signal: string) {
   console.log({ event: "shutdown", signal });
   stopScheduler();
+  await waitForIdleJobs(5_000);
+  console.log({ event: "shutdown_drained" });
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 10_000).unref();
 }

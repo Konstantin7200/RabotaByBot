@@ -9,7 +9,6 @@ export const STALE_PENDING_MS=5*60*1000;
 export const INLINE_DELIVERY_BUDGET_MS=4*60*1000; // < STALE_PENDING_MS (5 min)
 export const BATCH_POLL_MIN_MS=1_000;
 export const BATCH_POLL_MAX_MS=30_000;
-export const KEY_EXPIRE_MS=5*60*1000;
 export const TOKEN_EXPIRE_MS=7*24*60*60*1000;
 export const WATCH_RENEWAL_TICK="*/30 * * * *";
 export const WATCH_RENEWAL_MIN_INTERVAL_MS=24*60*60*1000;
@@ -19,6 +18,8 @@ export const WATCH_RENEWAL_THRESHOLD_MS=24*60*60*1000;
 export const TOKEN_EXPIRY_WARNING_MS=24*60*60*1000;
 export const TOKEN_EXPIRY_WARN_TICK='0 * * * *';
 export const PERSISTENT_FAILURE_THRESHOLD=3;
+export const RETENTION_DAYS=30;
+export const RETENTION_TICK='0 4 * * *';
 export const MESSAGE_WATCH_EXPIRED=(email:string)=>
     `Google login for ${email} has expired.\nRun /start to link the mailbox again`;
 export const MESSAGE_WATCH_RENEW_ERROR=(email:string)=>
@@ -39,6 +40,8 @@ export const HEARTBEAT_TICK='*/1 * * * *';
 export const MESSAGE_FOR_NO_MAILBOX_CONNECTED='No mailbox is connected right now run.\nRun /start to connect one';
 export const MESSAGE_FOR_UNLINK_CONFIRMATION=(email:string,scopes:string)=>
     `Mailbox ${email} has been unlinked.\nWatch stopped, access revoked (${scopes}).\nRun /start to connect a mailbox again`;
+export const MESSAGE_FOR_UNLINK_INCOMPLETE=(email:string,failedSteps:string)=>
+    `Mailbox ${email} has been unlinked from the bot, but Google-side cleanup did not fully complete (${failedSteps}).\nRevoke the app's access at https://myaccount.google.com/permissions if it is still listed there`;
 export const MESSAGE_MAILBOX_RELINKED=(email:string)=>
     `Mailbox ${email} is now linked to a different Telegram account.\nNotifications for this chat have stopped`;
 export const createReplacedMailboxMessage=(oldEmail:string,newEmail:string)=>

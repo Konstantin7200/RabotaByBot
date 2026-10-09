@@ -2,7 +2,7 @@ import { Context } from "grammy";
 import { getByUserId } from "../db/mailboxRepository";
 import { getByChatId } from "../db/userRepository";
 import { untrackMailbox } from "../gmail/untrackMailbox";
-import { MESSAGE_FOR_UNLINK_CONFIRMATION, REVOKED_SCOPES } from "../constants";
+import { MESSAGE_FOR_UNLINK_CONFIRMATION, MESSAGE_FOR_UNLINK_INCOMPLETE, REVOKED_SCOPES } from "../constants";
 
 export async function unlinkHandler(ctx: Context) {
     const chatId = ctx.chatId;
@@ -17,6 +17,12 @@ export async function unlinkHandler(ctx: Context) {
     if (mailbox === null) {
         return ctx.reply('You have no currently connected mailbox');
     }
-    await untrackMailbox(mailbox);
-    ctx.reply(MESSAGE_FOR_UNLINK_CONFIRMATION(mailbox.email, REVOKED_SCOPES));
+    const result = await untrackMailbox(mailbox);
+    const failedSteps = [
+        result.stopped ? null : "watch could not be stopped",
+        result.revoked ? null : "access could not be revoked",
+    ].filter((step): step is string => step !== null);
+    if (failedSteps.length === 0)
+        return ctx.reply(MESSAGE_FOR_UNLINK_CONFIRMATION(mailbox.email, REVOKED_SCOPES));
+    return ctx.reply(MESSAGE_FOR_UNLINK_INCOMPLETE(mailbox.email, failedSteps.join(", ")));
 }
