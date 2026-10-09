@@ -104,7 +104,7 @@ with a sleeping free tier violates the latency requirement — do not use one.
 | Item | Status |
 |---|---|
 | Real Rabota.by letter format (sender, subject templates) **not yet confirmed** (§6.3 of the assignment). The domain filter (`rabota.by`) and subject parsing patterns are best-effort and unconfirmed. | Open — verify against a real reply sample before trusting FR-5/FR-6 in production. |
-| FR-5 "matches the response template" gate | Deviation: currently every letter from the `rabota.by` domain notifies; a subject-pattern gate is planned as a config option. |
+| FR-5 "matches the response template" gate | Partial: every letter from the `rabota.by` domain notifies by default; set `RABOTA_SUBJECT_PATTERNS` (comma-separated subject substrings) to enable the gate once real subjects are confirmed. |
 | US-9 / US-10 transient failures | Deviation (deliberate): quick transient Gmail errors do not message the user; only persistent failures and hard access loss do. No spam for recovered blips. |
 | Journal retention | Sent rows are kept indefinitely (spec allows ≥ catch-up window); pruning is not wired up yet. |
 

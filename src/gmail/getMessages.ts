@@ -1,5 +1,7 @@
 import { gmail_v1 } from "@googleapis/gmail";
+import { EnvConfig } from "../config";
 import { isFromRabotaBy } from "./isFromRabotaBy";
+import { isResponseTemplate } from "./isResponseTemplate";
 import { messageBodyToText } from "./messageBody";
 import { parseMessageFields } from "./parseMessageFields";
 
@@ -20,7 +22,9 @@ async function validateMessages(gmail:gmail_v1.Gmail,messageIds: string[], email
         });
         const headers = response.data.payload?.headers ?? [];
         const fromHeader = headers.find(header => header.name?.toLowerCase() === "from");
-        if (fromHeader?.value && isFromRabotaBy(fromHeader.value))
+        const subjectHeader = headers.find(header => header.name?.toLowerCase() === "subject");
+        if (fromHeader?.value && isFromRabotaBy(fromHeader.value)
+            && isResponseTemplate(subjectHeader?.value ?? "", EnvConfig.rabotaSubjectPatterns))
             validMessageIds.push(id);
     }
     return validMessageIds;

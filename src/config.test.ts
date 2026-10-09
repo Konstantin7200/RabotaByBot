@@ -58,4 +58,16 @@ describe("EnvConfig", () => {
     it("rejects a TOKEN_ENCRYPTION_KEY that is not 64 hex characters", async () => {
         await expect(loadConfig({ TOKEN_ENCRYPTION_KEY: "nope" })).rejects.toThrow();
     });
+
+    it("parses RABOTA_SUBJECT_PATTERNS into a trimmed list", async () => {
+        const config = await loadConfig({
+            RABOTA_SUBJECT_PATTERNS: "ответ на отклик,  Вакансия ,",
+        });
+        expect(config.rabotaSubjectPatterns).toEqual(["ответ на отклик", "Вакансия"]);
+    });
+
+    it("defaults rabotaSubjectPatterns to an empty list (domain-only gate)", async () => {
+        const config = await loadConfig({ RABOTA_SUBJECT_PATTERNS: undefined });
+        expect(config.rabotaSubjectPatterns).toEqual([]);
+    });
 });

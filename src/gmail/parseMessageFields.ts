@@ -4,6 +4,8 @@ export interface ParsedMessageFields {
     outcome: string | null;
 }
 
+// UNCONFIRMED: outcome/subject patterns are best-effort guesses pending a
+// real Rabota.by reply sample (assignment §6.3).
 const OUTCOME_TEMPLATES: ReadonlyArray<{ pattern: RegExp; label: string }> = [
     { pattern: /не\s+готов\s+пригласить/i, label: "Отказ" },
     { pattern: /готов\s+пригласить/i, label: "Приглашение" }

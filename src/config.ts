@@ -6,6 +6,7 @@ type ConfigType={
     telegramWebhookSecret:string,
     publicBaseUrl:string,
     tokenEncryptionKey:string,
+    rabotaSubjectPatterns:string[],
     googleAuth:{
         clientId:string,
         secret:string,
@@ -22,6 +23,7 @@ type UnvalidatedConfigType= {
     telegramWebhookSecret:unknown,
     publicBaseUrl:unknown,
     tokenEncryptionKey:unknown,
+    rabotaSubjectPatterns:unknown,
     googleAuth:{
         clientId:unknown,
         secret:unknown,
@@ -38,6 +40,7 @@ type ValidatedConfigType={
     telegramWebhookSecret:string,
     publicBaseUrl:string,
     tokenEncryptionKey:string,
+    rabotaSubjectPatterns:string[],
     googleAuth:{
         clientId:string,
         secret:string,
@@ -54,6 +57,9 @@ function createConfig():ConfigType{
         tgBotToken:process.env.TG_BOT_TOKEN,
         telegramWebhookSecret:process.env.TELEGRAM_WEBHOOK_SECRET,
         tokenEncryptionKey:process.env.TOKEN_ENCRYPTION_KEY,
+        rabotaSubjectPatterns:typeof process.env.RABOTA_SUBJECT_PATTERNS==='string'
+            ? process.env.RABOTA_SUBJECT_PATTERNS.split(',').map((item)=>item.trim()).filter((item)=>item!=='')
+            : [],
         publicBaseUrl:typeof process.env.PUBLIC_BASE_URL==='string'
             ? process.env.PUBLIC_BASE_URL.replace(/\/+$/,'')
             : process.env.PUBLIC_BASE_URL,
@@ -85,6 +91,8 @@ function validateConfig(config:UnvalidatedConfigType):config is ValidatedConfigT
     if(typeof config.telegramWebhookSecret!=='string'||config.telegramWebhookSecret.trim()==="")
         return false;
     if(typeof config.tokenEncryptionKey!=='string'||!/^[0-9a-fA-F]{64}$/.test(config.tokenEncryptionKey))
+        return false;
+    if(!Array.isArray(config.rabotaSubjectPatterns))
         return false;
     if(typeof config.publicBaseUrl!=='string'||config.publicBaseUrl.trim()==="")
         return false;
