@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../db/notificationRepository", () => ({ addNotifications: vi.fn(), listByMessageIds: vi.fn() }));
-vi.mock("../db/mailboxRepository", () => ({ advanceBasis: vi.fn(), setAccessFailure: vi.fn() }));
+vi.mock("../db/mailboxRepository", () => ({
+    advanceBasis: vi.fn(),
+    setAccessFailure: vi.fn(),
+    registerTransientFailure: vi.fn(),
+    claimFailureNotice: vi.fn(),
+    registerPipelineSuccess: vi.fn(),
+}));
 vi.mock("./getMessages", () => ({ getDataFromMessages: vi.fn() }));
 vi.mock("./getMessageIds", () => ({ getMessageIds: vi.fn() }));
 vi.mock("./listMessageIdsSince", () => ({ listMessageIdsSince: vi.fn() }));
@@ -11,14 +17,14 @@ vi.mock("../bot/notifyMailboxOwner", () => ({ notifyMailboxOwner: vi.fn() }));
 
 import { catchUpMailbox } from "./catchUpMailbox";
 import { addNotifications, listByMessageIds } from "../db/notificationRepository";
-import { advanceBasis, setAccessFailure } from "../db/mailboxRepository";
+import { advanceBasis, claimFailureNotice, registerPipelineSuccess, registerTransientFailure, setAccessFailure } from "../db/mailboxRepository";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
 import { listMessageIdsSince } from "./listMessageIdsSince";
 import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
 import { getUserGmailClient } from "./getUserGmailClient";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
-import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR } from "../constants";
+import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR, MESSAGE_PERSISTENT_FAILURE } from "../constants";
 import { MailboxesTable } from "../db/entityTypes";
 
 const BASIS_AT = new Date("2026-10-09T00:00:00.000Z");
@@ -42,6 +48,9 @@ beforeEach(() => {
     vi.mocked(listByMessageIds).mockResolvedValue([{ id: 11 }] as never);
     vi.mocked(advanceBasis).mockResolvedValue(true);
     vi.mocked(setAccessFailure).mockResolvedValue(undefined as never);
+    vi.mocked(registerTransientFailure).mockResolvedValue(1);
+    vi.mocked(claimFailureNotice).mockResolvedValue(true);
+    vi.mocked(registerPipelineSuccess).mockResolvedValue(false);
     vi.mocked(notifyMailboxOwner).mockResolvedValue(undefined as never);
     vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("terminal");
     vi.mocked(listMessageIdsSince).mockResolvedValue(["m1"]);
@@ -88,6 +97,19 @@ describe("catchUpMailbox — history path", () => {
         expect(advanceBasis).not.toHaveBeenCalled();
         expect(setAccessFailure).not.toHaveBeenCalled();   // transient
         expect(notifyMailboxOwner).not.toHaveBeenCalled();
+        expect(registerTransientFailure).toHaveBeenCalledWith(7);
+    });
+
+    it("counts the transient failure toward the persistent-failure notice (US-9)", async () => {
+        vi.mocked(getMessageIds).mockRejectedValue(new Error("backendError"));
+        vi.mocked(registerTransientFailure).mockResolvedValue(3);
+        await expect(catchUpMailbox(mailbox)).rejects.toThrow("backendError");
+        expect(notifyMailboxOwner).toHaveBeenCalledWith(7, MESSAGE_PERSISTENT_FAILURE("a@b.c"));
+    });
+
+    it("resets the failure streak on a successful scan (US-10)", async () => {
+        await catchUpMailbox(mailbox);
+        expect(registerPipelineSuccess).toHaveBeenCalledWith(7);
     });
 
     it("does not advance the basis when ingestion throws", async () => {

@@ -9,6 +9,7 @@ import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
 import { getUserGmailClient } from "./getUserGmailClient";
 import { classifyAccessError } from "./classifyAccessError";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
+import { reportPipelineSuccess, reportTransientFailure } from "../bot/failureNotice";
 import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR } from "../constants";
 import { MailboxesTable } from "../db/entityTypes";
 
@@ -64,6 +65,7 @@ export async function notificationHandler(req: Request, res: Response) {
                 await addNotifications(notifications);
             const rows=await listByMessageIds(mailbox.id,messageData.map((m)=>m.gmailMessageId));
             await advanceBasis(mailbox.id,newHistoryId);
+            await reportPipelineSuccess(mailbox.id, mailbox.email);
             if(rows.length===0){
                 res.status(200).send();
                 return;
@@ -78,7 +80,9 @@ export async function notificationHandler(req: Request, res: Response) {
     } catch (err) {
         const kind = classifyAccessError(err);
         console.log({ event: "push_processing_failed", email: decoded.emailAddress, kind, err: String(err) });
-        if (kind !== "transient" && loadedMailbox !== null && loadedMailbox.accessStatus === "active") {
+        if (kind === "transient" && loadedMailbox !== null && loadedMailbox.accessStatus === "active") {
+            await reportTransientFailure(loadedMailbox.id, loadedMailbox.email);
+        } else if (kind !== "transient" && loadedMailbox !== null && loadedMailbox.accessStatus === "active") {
             await setAccessFailure(loadedMailbox.email, kind);
             await notifyMailboxOwner(loadedMailbox.id, kind === "expired"
                 ? MESSAGE_WATCH_EXPIRED(loadedMailbox.email)

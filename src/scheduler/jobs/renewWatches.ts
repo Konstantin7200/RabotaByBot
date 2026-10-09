@@ -5,6 +5,7 @@ import {
 } from "../../constants";
 import { listDueForRenewal, setAccessFailure } from "../../db/mailboxRepository";
 import { notifyMailboxOwner } from "../../bot/notifyMailboxOwner";
+import { reportPipelineSuccess, reportTransientFailure } from "../../bot/failureNotice";
 import { watch } from "../../gmail/watch";
 import { classifyAccessError } from "../../gmail/classifyAccessError";
 
@@ -17,12 +18,14 @@ export async function renewWatches() {
         try {
             const { expiration } = await watch(mailbox.email, mailbox.refreshToken);
             console.log({ event: "watch_renewed", email: mailbox.email, expiration });
+            await reportPipelineSuccess(mailbox.id, mailbox.email);
         } catch (err) {
             const watchDead = mailbox.watchExpiration !== null
                 && mailbox.watchExpiration.getTime() < Date.now();
             let kind = classifyAccessError(err);
             if (kind === "transient" && !watchDead) {
                 console.log({ event: "watch_renewal_transient_error", email: mailbox.email, err: String(err) });
+                await reportTransientFailure(mailbox.id, mailbox.email);
                 continue;
             }
             if (kind === "transient")

@@ -8,6 +8,7 @@ import { listMessageIdsSince } from "./listMessageIdsSince";
 import { getUserGmailClient } from "./getUserGmailClient";
 import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
+import { reportPipelineSuccess, reportTransientFailure } from "../bot/failureNotice";
 import { classifyAccessError, isHistoryUnavailable } from "./classifyAccessError";
 import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR } from "../constants";
 
@@ -43,6 +44,7 @@ async function ingestAndDeliver(
         rows = await listByMessageIds(mailbox.id, messageData.map((m) => m.gmailMessageId));
     }
     await advanceBasis(mailbox.id, newHistoryId);
+    await reportPipelineSuccess(mailbox.id, mailbox.email);
     let delivered = 0;
     if (rows.length > 0) {
         await deliverBatchUntilTerminal(rows.map((r) => r.id));
@@ -67,7 +69,9 @@ async function runFallbackPass(gmail: gmail_v1.Gmail, mailbox: MailboxesTable): 
 async function handleAccessError(err: unknown, mailbox: MailboxesTable): Promise<never> {
     const kind = classifyAccessError(err);
     console.log({ event: "catch_up_mailbox_failed", email: mailbox.email, kind, err });
-    if (kind !== "transient" && mailbox.accessStatus === "active") {
+    if (kind === "transient" && mailbox.accessStatus === "active") {
+        await reportTransientFailure(mailbox.id, mailbox.email);
+    } else if (kind !== "transient" && mailbox.accessStatus === "active") {
         await setAccessFailure(mailbox.email, kind);
         await notifyMailboxOwner(mailbox.id, kind === "expired"
             ? MESSAGE_WATCH_EXPIRED(mailbox.email)

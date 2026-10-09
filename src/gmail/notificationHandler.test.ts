@@ -8,6 +8,9 @@ vi.mock("../db/mailboxRepository", () => ({
     getMailbox: vi.fn(),
     advanceBasis: vi.fn(),
     setAccessFailure: vi.fn(),
+    registerTransientFailure: vi.fn(),
+    claimFailureNotice: vi.fn(),
+    registerPipelineSuccess: vi.fn(),
 }));
 vi.mock("./getMessages", () => ({ getDataFromMessages: vi.fn() }));
 vi.mock("./getMessageIds", () => ({ getMessageIds: vi.fn() }));
@@ -17,13 +20,13 @@ vi.mock("../bot/notifyMailboxOwner", () => ({ notifyMailboxOwner: vi.fn() }));
 
 import { notificationHandler } from "./notificationHandler";
 import { addNotifications, listByMessageIds } from "../db/notificationRepository";
-import { advanceBasis, getMailbox, setAccessFailure } from "../db/mailboxRepository";
+import { advanceBasis, claimFailureNotice, getMailbox, registerPipelineSuccess, registerTransientFailure, setAccessFailure } from "../db/mailboxRepository";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
 import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
 import { getUserGmailClient } from "./getUserGmailClient";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
-import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR } from "../constants";
+import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR, MESSAGE_PERSISTENT_FAILURE } from "../constants";
 
 const mailbox = { id: 7, email: "a@b.c", refreshToken: "refresh-token", accessStatus: "active", historyIdBasis: null as string | null };
 const messageData = (gmailMessageId: string) => ({
@@ -57,6 +60,9 @@ beforeEach(() => {
     vi.mocked(getDataFromMessages).mockResolvedValue([messageData("m1")]);
     vi.mocked(addNotifications).mockResolvedValue(null as never);
     vi.mocked(advanceBasis).mockResolvedValue(true);
+    vi.mocked(registerTransientFailure).mockResolvedValue(1);
+    vi.mocked(claimFailureNotice).mockResolvedValue(true);
+    vi.mocked(registerPipelineSuccess).mockResolvedValue(false);
     vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("terminal");
 });
 
@@ -167,6 +173,24 @@ describe("notificationHandler", () => {
         expect(notifyMailboxOwner).not.toHaveBeenCalled();
         expect(advanceBasis).not.toHaveBeenCalled();
         expect(res.status).toHaveBeenCalledWith(500);
+        expect(registerTransientFailure).toHaveBeenCalledWith(7);
+    });
+
+    it("notifies only after the persistent-failure threshold (US-9)", async () => {
+        const err = new Error("boom") as Error & { code: number };
+        err.code = 503;
+        vi.mocked(getMessageIds).mockRejectedValue(err);
+        vi.mocked(registerTransientFailure).mockResolvedValue(3);
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+        expect(notifyMailboxOwner).toHaveBeenCalledWith(7, MESSAGE_PERSISTENT_FAILURE("a@b.c"));
+    });
+
+    it("resets the failure streak on a successful push (US-10)", async () => {
+        vi.mocked(listByMessageIds).mockResolvedValue([] as never);
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+        expect(registerPipelineSuccess).toHaveBeenCalledWith(7);
     });
 
     it("marks error and notifies on a hard Gmail API failure (FR-12 в)", async () => {
