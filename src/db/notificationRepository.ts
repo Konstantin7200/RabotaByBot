@@ -112,7 +112,9 @@ export async function getRecentProblems(mailboxId: number) {
     const stuck = await db.select({ stuckCount: count() }).from(notificationsTable).where(and(
         eq(notificationsTable.mailboxId, mailboxId),
         eq(notificationsTable.status, 'pending'),
-        lt(notificationsTable.createdAt, new Date(Date.now() - STALE_PENDING_MS)),
+        // Replayed rows get a fresh window (FR-7/FR-11): measure from
+        // replayedAt when present, same as the stale pass does.
+        sql`${pendingAgeExpr()} < ${staleCutoff(new Date())}`,
     ));
     const failure = failures[0];
     return {

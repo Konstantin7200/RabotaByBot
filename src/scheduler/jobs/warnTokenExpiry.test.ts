@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const consent = vi.hoisted(() => ({ mode: "testing" as "testing" | "production" }));
+
 vi.mock("../../config", () => ({
-    EnvConfig: { googleConsentMode: "testing" as const, googleAuth: { clientId: "c", secret: "s", redirectUri: "r", topicName: "t" } },
+    EnvConfig: {
+        get googleConsentMode() { return consent.mode; },
+        googleAuth: { clientId: "c", secret: "s", redirectUri: "r", topicName: "t" },
+    },
 }));
 vi.mock("../../db/mailboxRepository", () => ({
     listDueForTokenExpiryWarning: vi.fn(),
@@ -20,7 +25,9 @@ const mailbox = (id: number, tokenGrantedAt: Date | null) =>
 
 beforeEach(() => {
     vi.clearAllMocks();
+    consent.mode = "testing";
     vi.mocked(listDueForTokenExpiryWarning).mockResolvedValue([]);
+    vi.mocked(notifyMailboxOwner).mockResolvedValue(true);
 });
 
 describe("warnTokenExpiry (US-8)", () => {
@@ -55,6 +62,26 @@ describe("warnTokenExpiry (US-8)", () => {
     it("skips mailboxes without a grant time", async () => {
         vi.mocked(listDueForTokenExpiryWarning).mockResolvedValue([mailbox(1, null)]);
         await warnTokenExpiry();
+        expect(notifyMailboxOwner).not.toHaveBeenCalled();
+    });
+
+    it("marks the grant as warned only after the message was actually sent", async () => {
+        vi.mocked(listDueForTokenExpiryWarning).mockResolvedValue([
+            mailbox(1, granted(TOKEN_EXPIRE_MS - 60 * 60 * 1000)),
+        ]);
+        vi.mocked(notifyMailboxOwner).mockResolvedValue(false);
+        await warnTokenExpiry();
+        expect(notifyMailboxOwner).toHaveBeenCalledTimes(1);
+        expect(markTokenExpiryWarned).not.toHaveBeenCalled();
+    });
+
+    it("does nothing at all in production consent mode", async () => {
+        consent.mode = "production";
+        vi.mocked(listDueForTokenExpiryWarning).mockResolvedValue([
+            mailbox(1, granted(TOKEN_EXPIRE_MS - 60 * 60 * 1000)),
+        ]);
+        await warnTokenExpiry();
+        expect(listDueForTokenExpiryWarning).not.toHaveBeenCalled();
         expect(notifyMailboxOwner).not.toHaveBeenCalled();
     });
 });

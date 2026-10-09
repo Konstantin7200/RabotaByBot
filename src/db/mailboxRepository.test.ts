@@ -6,17 +6,19 @@ type Capture = {
     selectedRow: Record<string, unknown> | null;
     inserted: Record<string, unknown> | null;
     selectWhere: unknown;
+    updateWhere: unknown;
     updateRows: Record<string, unknown>[];
 };
-const captured: Capture = { updated: false, selectedBasis: null, selectedRow: null, inserted: null, selectWhere: null, updateRows: [] };
+const captured: Capture = { updated: false, selectedBasis: null, selectedRow: null, inserted: null, selectWhere: null, updateWhere: null, updateRows: [] };
 
 vi.mock("./index", () => {
     const updateChain = {
         set() {
             return updateChain;
         },
-        where() {
+        where(expr: unknown) {
             captured.updated = true;
+            captured.updateWhere = expr;
             return {
                 returning() {
                     return Promise.resolve(captured.updateRows);
@@ -87,39 +89,37 @@ beforeEach(() => {
     captured.selectedRow = null;
     captured.inserted = null;
     captured.selectWhere = null;
+    captured.updateWhere = null;
     captured.updateRows = [];
     process.env.TOKEN_ENCRYPTION_KEY = KEY;
 });
 
+function updateWhereSql(): string {
+    expect(captured.updateWhere).not.toBeNull();
+    return new PgDialect().sqlToQuery(captured.updateWhere as never).sql;
+}
+
 describe("advanceBasis monotonicity (FR-3)", () => {
-    it("advances when the new history id is newer", async () => {
-        captured.selectedBasis = "90";
+    it("guards numeric writes with one atomic conditional UPDATE", async () => {
+        captured.updateRows = [{ value: 1 }];
         await expect(advanceBasis(1, "101")).resolves.toBe(true);
-        expect(captured.updated).toBe(true);
+        const sqlText = updateWhereSql();
+        expect(sqlText).toContain("historyIdBasis");
+        expect(sqlText.toLowerCase()).toContain("is null");
+        expect(sqlText).toContain("::bigint");
+        expect(sqlText).toContain("!~");
     });
 
-    it("skips the write when an out-of-order push would move the basis backwards", async () => {
-        captured.selectedBasis = "101";
+    it("reports false when the guard rejects an out-of-order write", async () => {
+        captured.updateRows = [];
         await expect(advanceBasis(1, "90")).resolves.toBe(false);
-        expect(captured.updated).toBe(false);
-    });
-
-    it("skips the write when the new history id equals the current basis", async () => {
-        captured.selectedBasis = "101";
-        await expect(advanceBasis(1, "101")).resolves.toBe(false);
-        expect(captured.updated).toBe(false);
-    });
-
-    it("advances when no basis is stored yet", async () => {
-        captured.selectedBasis = null;
-        await expect(advanceBasis(1, "101")).resolves.toBe(true);
         expect(captured.updated).toBe(true);
     });
 
-    it("treats non-numeric history ids as opaque and always advances", async () => {
-        captured.selectedBasis = "opaque-a";
+    it("writes opaque (non-numeric) history ids unconditionally", async () => {
+        captured.updateRows = [{ value: 1 }];
         await expect(advanceBasis(1, "opaque-b")).resolves.toBe(true);
-        expect(captured.updated).toBe(true);
+        expect(updateWhereSql()).not.toContain("::bigint");
     });
 });
 
@@ -185,23 +185,19 @@ describe("persistent failure tracking (US-9/US-10)", () => {
         await expect(claimFailureNotice(7)).resolves.toBe(false);
     });
 
-    it("registerPipelineSuccess reports owed only after a sent notice", async () => {
-        captured.selectedRow = { notified: null, failures: 0 };
-        await expect(registerPipelineSuccess(7)).resolves.toBe(false);
-        expect(captured.updated).toBe(false);
-
-        captured.selectedRow = { notified: null, failures: 2 };
-        await expect(registerPipelineSuccess(7)).resolves.toBe(false);
-        expect(captured.updated).toBe(true);
-
-        captured.selectedRow = { notified: new Date(), failures: 3 };
+    it("registerPipelineSuccess claims the restore right atomically", async () => {
+        captured.updateRows = [{ value: 7 }];
         await expect(registerPipelineSuccess(7)).resolves.toBe(true);
         expect(captured.updated).toBe(true);
+
+        captured.updateRows = [];
+        await expect(registerPipelineSuccess(7)).resolves.toBe(false);
     });
 
-    it("registerPipelineSuccess is a no-op for an unknown mailbox", async () => {
-        captured.selectedRow = null;
-        await expect(registerPipelineSuccess(7)).resolves.toBe(false);
-        expect(captured.updated).toBe(false);
+    it("registerPipelineSuccess always resets the failure counter", async () => {
+        captured.updateRows = [];
+        await registerPipelineSuccess(7);
+        expect(captured.updated).toBe(true);
+        expect(updateWhereSql()).toContain("consecutiveTransientFailures");
     });
 });

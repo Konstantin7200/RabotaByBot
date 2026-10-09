@@ -21,7 +21,9 @@ import {
 } from "../constants";
 
 async function unlinkReplacedMailbox(oldMailbox:MailboxesTable,newEmail:string,chatId:number){
-    await untrackMailbox(oldMailbox);
+    const result=await untrackMailbox(oldMailbox);
+    if(!result.stopped||!result.revoked)
+        console.log({event:"replaced_unlink_incomplete",email:oldMailbox.email,stopped:result.stopped,revoked:result.revoked});
     try{
         await sendMessage(chatId,createReplacedMailboxMessage(oldMailbox.email,newEmail));
     } catch(err){

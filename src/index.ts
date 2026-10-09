@@ -1,30 +1,11 @@
-import express from "express";
-import { webhookCallback } from "grammy";
 import { EnvConfig } from "./config";
-import { loadHandlers } from "./bot/loadHandlers";
 import { getBot } from "./bot";
-import router from "./auth/routes";
-import { gmailRouter } from "./gmail/routes";
-import { PUBLIC_DIR } from "./constants";
+import { createApp } from "./app";
 import { startScheduler, stopScheduler, waitForIdleJobs } from "./scheduler";
 import { runCatchUpPass } from "./scheduler/jobs/catchUpPass";
 import { announceRestart } from "./startup/announceRestart";
 
-const app = express();
-
-app.get("/health", (_req, res) => {
-  res.send("ok");
-});
-
-loadHandlers();
-app.use(express.json());
-app.use(express.static(PUBLIC_DIR));
-app.post(
-  "/telegram/webhook",
-  webhookCallback(getBot(), "express", { secretToken: EnvConfig.telegramWebhookSecret }),
-);
-app.use(gmailRouter);
-app.use(router);
+const app = createApp();
 const server = app.listen(EnvConfig.port, async () => {
   console.log({ event: "server_listening", port: EnvConfig.port });
   try {

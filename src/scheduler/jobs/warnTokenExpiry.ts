@@ -20,8 +20,12 @@ export async function warnTokenExpiry() {
         const remaining = expiresAt.getTime() - now;
         if (remaining <= 0 || remaining > TOKEN_EXPIRY_WARNING_MS)
             continue;
+        const sent = await notifyMailboxOwner(mailbox.id, MESSAGE_LOGIN_EXPIRING_SOON(mailbox.email, expiresAt));
+        if (!sent) {
+            console.log({ event: "token_expiry_warning_not_sent", email: mailbox.email });
+            continue;
+        }
         await markTokenExpiryWarned(mailbox.id);
-        await notifyMailboxOwner(mailbox.id, MESSAGE_LOGIN_EXPIRING_SOON(mailbox.email, expiresAt));
         warned += 1;
     }
     console.log({ event: "token_expiry_warning_check", candidates: candidates.length, warned });

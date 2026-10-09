@@ -31,6 +31,8 @@ export async function createMailbox(value:CreatedMailbox){
             accessStatus: 'active',
             linkedAt: valueForDb.linkedAt,
             tokenExpiryWarnedAt: null,
+            consecutiveTransientFailures: 0,
+            failureNotifiedAt: null,
         },
     });
 }
@@ -90,14 +92,22 @@ export async function setLastDeliveredAt(id:number,lastDeliveredAt:Date) {
 // basis must never advance past messages that have no journal row yet.
 // historyIdBasisAt is stamped together with the basis so the wall-clock time
 // always matches the basis write it accompanies.
-// Monotonic: an out-of-order push must never move the basis backwards.
+// Monotonic AND atomic: the guard lives in the UPDATE's WHERE clause so two
+// concurrent pushes can never move the basis backwards.
 export async function advanceBasis(id:number,historyIdBasis:string):Promise<boolean> {
-    const current=await db.select({basis:mailboxesTable.historyIdBasis}).from(mailboxesTable).where(eq(mailboxesTable.id,id)).limit(1);
-    const existing=current[0]?.basis??null;
-    if(existing!==null&&isHistoryIdValue(existing)&&isHistoryIdValue(historyIdBasis)&&BigInt(historyIdBasis)<=BigInt(existing))
-        return false;
-    await db.update(mailboxesTable).set({historyIdBasis, historyIdBasisAt:new Date()}).where(eq(mailboxesTable.id,id));
-    return true;
+    const update=db.update(mailboxesTable).set({historyIdBasis, historyIdBasisAt:new Date()});
+    const condition=isHistoryIdValue(historyIdBasis)
+        ? and(
+            eq(mailboxesTable.id,id),
+            or(
+                isNull(mailboxesTable.historyIdBasis),
+                sql`(${mailboxesTable.historyIdBasis} !~ '^[0-9]+$')`,
+                sql`(${mailboxesTable.historyIdBasis})::bigint < ${historyIdBasis}::bigint`,
+            ),
+        )
+        : eq(mailboxesTable.id,id);
+    const rows=await update.where(condition).returning({value:mailboxesTable.id});
+    return rows.length>0;
 }
 
 function isHistoryIdValue(value:string):boolean {
@@ -162,20 +172,15 @@ export async function claimFailureNotice(id:number):Promise<boolean> {
     return rows.length>0;
 }
 
-// US-10: resets the failure streak; returns true when a persistent-failure
-// notice had been sent, i.e. the owner is owed a "working again" message.
+// US-10: atomically claim the right to send the "working again" message and
+// reset the failure streak. Concurrent successes can never both claim it.
 export async function registerPipelineSuccess(id:number):Promise<boolean> {
-    const current=await db.select({
-        notified:mailboxesTable.failureNotifiedAt,
-        failures:mailboxesTable.consecutiveTransientFailures,
-    }).from(mailboxesTable).where(eq(mailboxesTable.id,id)).limit(1);
-    const hadNotice=current[0]?.notified??null;
-    if(current.length===0)
-        return false;
-    if(hadNotice===null&&current[0].failures===0)
-        return false;
+    const claimed=await db.update(mailboxesTable)
+        .set({failureNotifiedAt:null})
+        .where(and(eq(mailboxesTable.id,id),isNotNull(mailboxesTable.failureNotifiedAt)))
+        .returning({value:mailboxesTable.id});
     await db.update(mailboxesTable)
-        .set({consecutiveTransientFailures:0,failureNotifiedAt:null})
-        .where(eq(mailboxesTable.id,id));
-    return hadNotice!==null;
+        .set({consecutiveTransientFailures:0})
+        .where(and(eq(mailboxesTable.id,id),sql`${mailboxesTable.consecutiveTransientFailures} > 0`));
+    return claimed.length>0;
 }

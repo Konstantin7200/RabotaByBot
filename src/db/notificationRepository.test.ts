@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 
-type Capture = { where: unknown; set: Record<string, unknown> | null };
-const captured: Capture = { where: null, set: null };
+type Capture = { where: unknown; set: Record<string, unknown> | null; selectRows: unknown[] };
+const captured: Capture = { where: null, set: null, selectRows: [] };
 
 vi.mock("./index", () => {
     const updateChain = {
@@ -21,9 +21,23 @@ vi.mock("./index", () => {
     const selectChain = {
         from() {
             return {
-                async where(expr: unknown) {
+                where(expr: unknown) {
                     captured.where = expr;
-                    return [];
+                    const chain = {
+                        orderBy() {
+                            return chain;
+                        },
+                        limit() {
+                            return Promise.resolve(captured.selectRows);
+                        },
+                        then(
+                            resolve: (value: unknown) => void,
+                            reject: (reason: unknown) => void,
+                        ) {
+                            Promise.resolve(captured.selectRows).then(resolve, reject);
+                        },
+                    };
+                    return chain;
                 },
             };
         },
@@ -36,7 +50,7 @@ vi.mock("./index", () => {
     };
 });
 
-import { claimDueRetries, markStaleAsSent, replayFailed } from "./notificationRepository";
+import { claimDueRetries, getRecentProblems, markStaleAsSent, replayFailed } from "./notificationRepository";
 
 const dialect = new PgDialect();
 
@@ -48,6 +62,7 @@ function whereSql(): string {
 beforeEach(() => {
     captured.where = null;
     captured.set = null;
+    captured.selectRows = [];
 });
 
 describe("FR-7/FR-11 staleness window (replay-aware)", () => {
@@ -78,5 +93,12 @@ describe("FR-7/FR-11 staleness window (replay-aware)", () => {
             replayedAt: now,
         });
         expect(whereSql()).toContain("status");
+    });
+
+    it("getRecentProblems counts stuck rows on the same replay-aware window", async () => {
+        captured.selectRows = [{ stuckCount: 0 }, { id: 1, lastError: null, createdAt: new Date(), attempts: 0 }];
+        await getRecentProblems(7);
+        expect(whereSql()).toContain("coalesce");
+        expect(whereSql()).toContain("replayedAt");
     });
 });
