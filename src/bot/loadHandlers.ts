@@ -3,15 +3,12 @@ import { unlinkHandler } from "./unlinkHandler";
 import { statusHandler } from "./statusHandler";
 import { getBot } from ".";
 
-
-export async function loadHandlers(){
+export function loadHandlers(){
     const bot=getBot();
 
     bot.command('start',startHandler)
-    
-    bot.command('unlink',unlinkHandler)
-    
-    bot.command('status',statusHandler)
 
-    bot.start();
+    bot.command('unlink',unlinkHandler)
+
+    bot.command('status',statusHandler)
 }

@@ -6,7 +6,7 @@ import { createRequirePushAuth, derivePushAudience } from "./pushAuth";
 
 export const gmailRouter=Router();
 
-const audience = derivePushAudience(EnvConfig.googleAuth.redirectUri);
+const audience = derivePushAudience(EnvConfig.publicBaseUrl);
 const certsUrl = new URL("https://www.googleapis.com/oauth2/v3/certs");
 console.log({ event: "push_auth_config", audience, certsUrl });
 

@@ -1,6 +1,8 @@
 import express from "express";
+import { webhookCallback } from "grammy";
 import { EnvConfig } from "./config";
 import { loadHandlers } from "./bot/loadHandlers";
+import { getBot } from "./bot";
 import router from "./auth/routes";
 import { gmailRouter } from "./gmail/routes";
 import { PUBLIC_DIR } from "./constants";
@@ -17,10 +19,22 @@ app.get("/", (_req, res) => {
 loadHandlers();
 app.use(express.json());
 app.use(express.static(PUBLIC_DIR));
+app.post(
+  "/telegram/webhook",
+  webhookCallback(getBot(), "express", { secretToken: EnvConfig.telegramWebhookSecret }),
+);
 app.use(gmailRouter);
 app.use(router);
 const server = app.listen(EnvConfig.port, async () => {
-  console.log(`Example app running`);
+  console.log({ event: "server_listening", port: EnvConfig.port });
+  try {
+    await getBot().api.setWebhook(`${EnvConfig.publicBaseUrl}/telegram/webhook`, {
+      secret_token: EnvConfig.telegramWebhookSecret,
+    });
+    console.log({ event: "telegram_webhook_set", url: `${EnvConfig.publicBaseUrl}/telegram/webhook` });
+  } catch (err) {
+    console.log({ event: "telegram_webhook_set_failed", err: String(err) });
+  }
   let wasDown = false;
   try {
     wasDown = await announceRestart();
@@ -37,6 +51,7 @@ function shutdown(signal: string) {
   console.log({ event: "shutdown", signal });
   stopScheduler();
   server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 10_000).unref();
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

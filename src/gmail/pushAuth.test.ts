@@ -23,7 +23,11 @@ beforeEach(async () => {
 });
 
 describe("derivePushAudience", () => {
-    it("replaces the redirect path with the push endpoint path", () => {
+    it("builds the push endpoint audience from the public base url", () => {
+        expect(derivePushAudience("https://bot.up.railway.app"))
+            .toBe("https://bot.up.railway.app/gmail/notification");
+    });
+    it("ignores any path on the base url", () => {
         expect(derivePushAudience("https://bot.up.railway.app/oauth/callback"))
             .toBe("https://bot.up.railway.app/gmail/notification");
     });

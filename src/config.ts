@@ -3,6 +3,8 @@ import "dotenv/config";
 type ConfigType={
     port:number,
     tgBotToken:string,
+    telegramWebhookSecret:string,
+    publicBaseUrl:string,
     googleAuth:{
         clientId:string,
         secret:string,
@@ -16,6 +18,8 @@ type ConfigType={
 type UnvalidatedConfigType= {
     port:unknown,
     tgBotToken:unknown,
+    telegramWebhookSecret:unknown,
+    publicBaseUrl:unknown,
     googleAuth:{
         clientId:unknown,
         secret:unknown,
@@ -29,6 +33,8 @@ type UnvalidatedConfigType= {
 type ValidatedConfigType={
     port:string,
     tgBotToken:string,
+    telegramWebhookSecret:string,
+    publicBaseUrl:string,
     googleAuth:{
         clientId:string,
         secret:string,
@@ -43,6 +49,10 @@ function createConfig():ConfigType{
     const config:UnvalidatedConfigType={
         port:process.env.PORT,
         tgBotToken:process.env.TG_BOT_TOKEN,
+        telegramWebhookSecret:process.env.TELEGRAM_WEBHOOK_SECRET,
+        publicBaseUrl:typeof process.env.PUBLIC_BASE_URL==='string'
+            ? process.env.PUBLIC_BASE_URL.replace(/\/+$/,'')
+            : process.env.PUBLIC_BASE_URL,
         googleAuth:{
             clientId:process.env.GOOGLE_CLIENT_ID,
             secret:process.env.GOOGLE_CLIENT_SECRET,
@@ -68,6 +78,17 @@ function validateConfig(config:UnvalidatedConfigType):config is ValidatedConfigT
         return false;
     if(typeof config.tgBotToken!=='string'||config.tgBotToken.trim()==="")
         return false;
+    if(typeof config.telegramWebhookSecret!=='string'||config.telegramWebhookSecret.trim()==="")
+        return false;
+    if(typeof config.publicBaseUrl!=='string'||config.publicBaseUrl.trim()==="")
+        return false;
+    try{
+        const parsed=new URL(config.publicBaseUrl);
+        if(parsed.protocol!=='https:'&&parsed.protocol!=='http:')
+            return false;
+    }catch{
+        return false;
+    }
     if(typeof config.googleAuth.clientId!=='string'||config.googleAuth.clientId.trim()==="")
         return false;
     if(typeof config.googleAuth.redirectUri!=='string'||config.googleAuth.redirectUri.trim()==="")
