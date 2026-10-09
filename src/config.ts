@@ -5,6 +5,7 @@ type ConfigType={
     tgBotToken:string,
     telegramWebhookSecret:string,
     publicBaseUrl:string,
+    tokenEncryptionKey:string,
     googleAuth:{
         clientId:string,
         secret:string,
@@ -20,6 +21,7 @@ type UnvalidatedConfigType= {
     tgBotToken:unknown,
     telegramWebhookSecret:unknown,
     publicBaseUrl:unknown,
+    tokenEncryptionKey:unknown,
     googleAuth:{
         clientId:unknown,
         secret:unknown,
@@ -35,6 +37,7 @@ type ValidatedConfigType={
     tgBotToken:string,
     telegramWebhookSecret:string,
     publicBaseUrl:string,
+    tokenEncryptionKey:string,
     googleAuth:{
         clientId:string,
         secret:string,
@@ -50,6 +53,7 @@ function createConfig():ConfigType{
         port:process.env.PORT,
         tgBotToken:process.env.TG_BOT_TOKEN,
         telegramWebhookSecret:process.env.TELEGRAM_WEBHOOK_SECRET,
+        tokenEncryptionKey:process.env.TOKEN_ENCRYPTION_KEY,
         publicBaseUrl:typeof process.env.PUBLIC_BASE_URL==='string'
             ? process.env.PUBLIC_BASE_URL.replace(/\/+$/,'')
             : process.env.PUBLIC_BASE_URL,
@@ -79,6 +83,8 @@ function validateConfig(config:UnvalidatedConfigType):config is ValidatedConfigT
     if(typeof config.tgBotToken!=='string'||config.tgBotToken.trim()==="")
         return false;
     if(typeof config.telegramWebhookSecret!=='string'||config.telegramWebhookSecret.trim()==="")
+        return false;
+    if(typeof config.tokenEncryptionKey!=='string'||!/^[0-9a-fA-F]{64}$/.test(config.tokenEncryptionKey))
         return false;
     if(typeof config.publicBaseUrl!=='string'||config.publicBaseUrl.trim()==="")
         return false;

@@ -5,6 +5,7 @@ const baseEnv: Record<string, string> = {
     TG_BOT_TOKEN: "tg-token",
     TELEGRAM_WEBHOOK_SECRET: "hook-secret",
     PUBLIC_BASE_URL: "https://bot.example.com",
+    TOKEN_ENCRYPTION_KEY: "b".repeat(64),
     GOOGLE_CLIENT_ID: "client-id",
     GOOGLE_CLIENT_SECRET: "client-secret",
     GOOGLE_REDIRECT_URI: "https://bot.example.com/oauth/callback",
@@ -52,5 +53,9 @@ describe("EnvConfig", () => {
 
     it("rejects an unparseable PUBLIC_BASE_URL", async () => {
         await expect(loadConfig({ PUBLIC_BASE_URL: "not a url" })).rejects.toThrow();
+    });
+
+    it("rejects a TOKEN_ENCRYPTION_KEY that is not 64 hex characters", async () => {
+        await expect(loadConfig({ TOKEN_ENCRYPTION_KEY: "nope" })).rejects.toThrow();
     });
 });

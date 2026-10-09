@@ -2,11 +2,21 @@ import { and, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from ".";
 import { InsertedMailbox, MailboxesTable } from "./entityTypes";
 import { accessStatusEnum, mailboxesTable, usersTable } from "./schema";
+import { decryptTokenOrNull, encryptSecret } from "./secretBox";
+
+function encryptToken(token: string | null | undefined): string | null | undefined {
+    return token === undefined ? undefined : token === null ? null : encryptSecret(token);
+}
+
+function decryptRow<T extends { refreshToken: string | null }>(row: T): T {
+    return { ...row, refreshToken: decryptTokenOrNull(row.refreshToken) };
+}
 
 type CreatedMailbox=Omit<InsertedMailbox,'linkedAt'|'tokenGrantedAt'|'accessStatus'|'historyIdBasis'|'watchExpiration'>
 export async function createMailbox(value:CreatedMailbox){
     const valueForDb:InsertedMailbox={
         ...value,
+        refreshToken:encryptToken(value.refreshToken)??null,
         linkedAt:new Date(),
         tokenGrantedAt:new Date(),
         accessStatus:'active',
@@ -41,17 +51,17 @@ export async function unlinkMailbox(userId:number) {
 
 export async function getMailbox(email:string) {
     const data=await db.select().from(mailboxesTable).where(eq(mailboxesTable.email,email)).limit(1);
-    return data.length>0?data[0]:null;
+    return data.length>0?decryptRow(data[0]):null;
 }
 
 export async function getByUserId(userId:number) {
     const data=await db.select().from(mailboxesTable).where(eq(mailboxesTable.userId,userId)).limit(1);
-    return data.length>0?data[0]:null;
+    return data.length>0?decryptRow(data[0]):null;
 }
 
 export async function getMailboxByChatId(chatId:string) {
     const data=await db.select().from(mailboxesTable).innerJoin(usersTable,eq(usersTable.id,mailboxesTable.userId)).where(eq(usersTable.chatId,chatId)).limit(1);
-    return data.length>0?data[0].mailboxes:null;
+    return data.length>0?decryptRow(data[0].mailboxes):null;
 }
 
 export async function setWatchSuccess(email:string,historyIdBasis:string,watchExpiration:Date) {
@@ -91,16 +101,18 @@ function isHistoryIdValue(value:string):boolean {
 }
 
 export async function listActive() {
-    return db.select({
+    const rows=await db.select({
         mailbox: mailboxesTable,
         chatId: usersTable.chatId,
     }).from(mailboxesTable).innerJoin(usersTable,eq(mailboxesTable.userId,usersTable.id)).where(eq(mailboxesTable.accessStatus,'active'));
+    return rows.map((row)=>({...row,mailbox:decryptRow(row.mailbox)}));
 }
 
 export async function listDueForRenewal(threshold:Date):Promise<MailboxesTable[]> {
-    return db.select().from(mailboxesTable).where(and(
+    const rows=await db.select().from(mailboxesTable).where(and(
         eq(mailboxesTable.accessStatus,'active'),
         isNotNull(mailboxesTable.refreshToken),
         or(isNull(mailboxesTable.watchExpiration),lt(mailboxesTable.watchExpiration,threshold)),
     ));
+    return rows.map(decryptRow);
 }
