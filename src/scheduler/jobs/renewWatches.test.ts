@@ -46,11 +46,12 @@ describe("renewWatches", () => {
         expect(watch).not.toHaveBeenCalled();
     });
 
-    it("marks expired and notifies once when refresh fails with invalid_grant (FR-12 Р±)", async () => {
+    it("marks expired and notifies once when refresh fails with invalid_grant (FR-12 б)", async () => {
         vi.mocked(watch).mockRejectedValue(gaxios({ code: 400, message: "invalid_grant: Token has been expired or revoked." }));
         await renewWatches();
         expect(setAccessFailure).toHaveBeenCalledWith("u@b.c", "expired");
         expect(notifyMailboxOwner).toHaveBeenCalledWith(5, MESSAGE_WATCH_EXPIRED("u@b.c"));
+        expect(notifyMailboxOwner).toHaveBeenCalledTimes(1);
     });
 
     it("stays silent on a transient error while the watch is still valid", async () => {
@@ -61,7 +62,7 @@ describe("renewWatches", () => {
         expect(notifyMailboxOwner).not.toHaveBeenCalled();
     });
 
-    it("promotes a transient error to error and notifies when the watch is dead (FR-12 Р°)", async () => {
+    it("promotes a transient error to error and notifies when the watch is dead (FR-12 а)", async () => {
         vi.mocked(listDueForRenewal).mockResolvedValue([{ ...base, watchExpiration: new Date(Date.now() - 1000) } as never]);
         vi.mocked(watch).mockRejectedValue(gaxios({ code: 503 }));
         await renewWatches();
@@ -69,7 +70,7 @@ describe("renewWatches", () => {
         expect(notifyMailboxOwner).toHaveBeenCalledWith(5, MESSAGE_WATCH_RENEW_ERROR("u@b.c"));
     });
 
-    it("marks error and notifies on a hard API failure regardless of watch expiry (FR-12 РІ)", async () => {
+    it("marks error and notifies on a hard API failure regardless of watch expiry (FR-12 в)", async () => {
         vi.mocked(listDueForRenewal).mockResolvedValue([{ ...base, watchExpiration: new Date(Date.now() + 60_000) } as never]);
         vi.mocked(watch).mockRejectedValue(gaxios({ code: 403 }));
         await renewWatches();
