@@ -13,6 +13,7 @@ export const KEY_EXPIRE_MS=5*60*1000;
 export const TOKEN_EXPIRE_MS=7*24*60*60*1000;
 export const WATCH_RENEWAL_TICK="*/30 * * * *";
 export const DELIVERY_TICK="*/10 * * * * *";
+export const CATCHUP_TICK="0 3 * * *";
 export const WATCH_RENEWAL_THRESHOLD_MS=24*60*60*1000;
 export const MESSAGE_WATCH_EXPIRED=(email:string)=>
     `Google login for ${email} has expired.\nRun /start to link the mailbox again`;
