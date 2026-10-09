@@ -10,6 +10,7 @@ import { getUserGmailClient } from "./getUserGmailClient";
 import { classifyAccessError } from "./classifyAccessError";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
 import { reportPipelineSuccess, reportTransientFailure } from "../bot/failureNotice";
+import { reportUnreadableToken } from "./reportUnreadableToken";
 import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR } from "../constants";
 import { MailboxesTable } from "../db/entityTypes";
 
@@ -36,7 +37,12 @@ export async function notificationHandler(req: Request, res: Response) {
     try {
         const mailbox = await getMailbox(decoded.emailAddress);
         loadedMailbox = mailbox;
-        if (mailbox === null || mailbox.refreshToken === null || mailbox.accessStatus === "unlinked") {
+        if (mailbox === null || mailbox.accessStatus === "unlinked") {
+            res.status(200).send();
+            return;
+        }
+        if (mailbox.refreshToken === null) {
+            await reportUnreadableToken(mailbox);
             res.status(200).send();
             return;
         }

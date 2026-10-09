@@ -39,6 +39,7 @@ export async function statusHandler(ctx:Context){
         tokenExpiresAt:computeTokenExpiresAt(mailbox.tokenGrantedAt),
         consentMode:EnvConfig.googleConsentMode,
         lastDeliveredAt:mailbox.lastDeliveredAt,
+        credentialsUnreadable:mailbox.accessStatus==='active'&&mailbox.refreshToken===null,
         now:new Date(),
     }));
 }
@@ -52,12 +53,16 @@ export function createStatusMessage(input:{
     tokenExpiresAt:Date|null;
     consentMode:string;
     lastDeliveredAt:Date|null;
+    credentialsUnreadable:boolean;
     now?:Date;
 }){
     const now=input.now??new Date();
     const warning=input.accessStatus==='active'
         ? ''
         : `\nWarning: tracking is stopped (${input.accessStatus}).\nRun /start to re-link the mailbox`;
+    const unreadable=input.credentialsUnreadable
+        ? '\nWarning: the stored login can no longer be read.\nRun /start to re-link the mailbox'
+        : '';
     const blocked=input.chatBlocked?`\n${MESSAGE_CHAT_BLOCKED}`:'';
     const delivery=input.problems.stuckCount>0||input.problems.lastFailure!==null
         ? `\n${createDeliveryProblemsWarning(input.problems.stuckCount,input.problems.lastFailure?.lastError??null,input.problems.lastFailure?.attempts??0)}`
@@ -84,5 +89,5 @@ export function createStatusMessage(input:{
     const freshness=input.lastDeliveredAt===null
         ? '\nLast notification: none delivered yet'
         : `\nLast notification: ${input.lastDeliveredAt.toUTCString()}`;
-    return `Email:${input.email}\nWatch expiration:${watchExpiration} UTC\nToken Expiration:${tokenLine}${input.tokenExpiresAt===null?'':' UTC'}${warning}${loginWarning}${watchWarning}${blocked}${delivery}${freshness}`;
+    return `Email:${input.email}\nWatch expiration:${watchExpiration} UTC\nToken Expiration:${tokenLine}${input.tokenExpiresAt===null?'':' UTC'}${warning}${unreadable}${loginWarning}${watchWarning}${blocked}${delivery}${freshness}`;
 }

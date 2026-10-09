@@ -142,6 +142,16 @@ describe("notificationHandler", () => {
         expect(res.status).toHaveBeenCalledWith(200);
     });
 
+    it("marks access lost and notifies when the stored token is unreadable (WP4)", async () => {
+        vi.mocked(getMailbox).mockResolvedValue({ ...mailbox, refreshToken: null, accessStatus: "active" } as never);
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+        expect(setAccessFailure).toHaveBeenCalledWith("a@b.c", "expired");
+        expect(notifyMailboxOwner).toHaveBeenCalledWith(7, MESSAGE_WATCH_EXPIRED("a@b.c"));
+        expect(getUserGmailClient).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     it("holds an already-lost mailbox with 500 and no Gmail calls", async () => {
         vi.mocked(getMailbox).mockResolvedValue({ ...mailbox, accessStatus: "expired" } as never);
         const res = makeResponse();

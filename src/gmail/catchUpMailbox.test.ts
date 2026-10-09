@@ -68,6 +68,13 @@ describe("catchUpMailbox — skip rules", () => {
             .resolves.toEqual({ outcome: "skipped", reason });
         expect(getUserGmailClient).not.toHaveBeenCalled();
     });
+
+    it("marks access lost and tells the owner to re-link when the token is unreadable (WP4)", async () => {
+        await expect(catchUpMailbox({ ...mailbox, refreshToken: null } as never))
+            .resolves.toEqual({ outcome: "skipped", reason: "no_token" });
+        expect(setAccessFailure).toHaveBeenCalledWith("a@b.c", "expired");
+        expect(notifyMailboxOwner).toHaveBeenCalledWith(7, MESSAGE_WATCH_EXPIRED("a@b.c"));
+    });
 });
 
 describe("catchUpMailbox — history path", () => {

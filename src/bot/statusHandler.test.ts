@@ -28,6 +28,7 @@ function base(overrides: Partial<Parameters<typeof createStatusMessage>[0]> = {}
         tokenExpiresAt: new Date("2026-10-15T12:00:00.000Z"),
         consentMode: "testing",
         lastDeliveredAt: null,
+        credentialsUnreadable: false,
         now: NOW,
         ...overrides,
     });
@@ -67,6 +68,12 @@ describe("createStatusMessage (FR-1, US-2)", () => {
         expect(base()).toContain("none delivered yet");
         expect(base({ lastDeliveredAt: new Date("2026-10-09T08:00:00.000Z") }))
             .toContain(`Last notification: ${new Date("2026-10-09T08:00:00.000Z").toUTCString()}`);
+    });
+
+    it("warns when the stored login can no longer be read (WP4 fresh start)", () => {
+        const msg = base({ credentialsUnreadable: true });
+        expect(msg).toContain("stored login can no longer be read");
+        expect(msg).toContain("/start");
     });
 
     it("warns when the bot is blocked in the chat (FR-11)", () => {

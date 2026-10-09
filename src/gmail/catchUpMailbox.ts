@@ -9,6 +9,7 @@ import { getUserGmailClient } from "./getUserGmailClient";
 import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
 import { reportPipelineSuccess, reportTransientFailure } from "../bot/failureNotice";
+import { reportUnreadableToken } from "./reportUnreadableToken";
 import { classifyAccessError, isHistoryUnavailable } from "./classifyAccessError";
 import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR } from "../constants";
 
@@ -84,8 +85,10 @@ async function handleAccessError(err: unknown, mailbox: MailboxesTable): Promise
 export async function catchUpMailbox(mailbox: MailboxesTable): Promise<CatchUpResult> {
     if (mailbox.accessStatus !== "active")
         return { outcome: "skipped", reason: "not_active" };
-    if (mailbox.refreshToken === null)
+    if (mailbox.refreshToken === null) {
+        await reportUnreadableToken(mailbox);
         return { outcome: "skipped", reason: "no_token" };
+    }
     if (mailbox.historyIdBasis === null)
         return { outcome: "skipped", reason: "no_basis" };
 
