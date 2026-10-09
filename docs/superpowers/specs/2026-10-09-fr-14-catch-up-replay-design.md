@@ -51,7 +51,7 @@ Write rules (mirror the basis exactly):
   `historyIdBasisAt` just like the basis (set only when basis was null);
 - `unlinkMailbox()` → clears `historyIdBasisAt` alongside `historyIdBasis`;
 - Legacy rows (basis set, `historyIdBasisAt IS NULL`): bound falls back to
-  `tokenGrantedAt` (see §4.3) — no backfill migration.
+  epoch (see §4.3) — no backfill migration.
 
 `lastDeliveredAt` is wired on successful delivery (`deliverNotification` → after
 `setNotificationDelivered`) because §2 of the spec lists it as stored metadata.
@@ -114,7 +114,7 @@ only. 404 means the stored `historyId` is no longer valid (long idle); it is
   be lost; candidates are re-validated against the real RFC 5322 From header by
   the existing `validateMessages` inside `getDataFromMessages`.
 
-**Scan bound (`after`)** = `historyIdBasisAt ?? tokenGrantedAt`, in Unix
+**Scan bound (`after`)** = `historyIdBasisAt ?? new Date(0)` (epoch), in Unix
 seconds minus 1 (one-second overlap; the journal absorbs the overlap).
 
 Rationale — why the basis timestamp and not the spec's literal
@@ -128,13 +128,20 @@ Rationale — why the basis timestamp and not the spec's literal
   lost, a `lastDeliveredAt`-based bound starts *after* the unprocessed mail and
   skips it permanently (violates US-11.1). The basis bound is therefore the
   safe, tighter interpretation of the requirement;
-- with `historyIdBasisAt IS NULL` (legacy row) the bound degrades to
-  `tokenGrantedAt` — also always ≤ the basis point, so safe, only wider.
+- with `historyIdBasisAt IS NULL` (legacy row) the bound degrades to epoch:
+  `tokenGrantedAt` resets to `now` on every re-consent
+  (`createMailbox` upsert, `mailboxRepository.ts`), so on a legacy row it can
+  **postdate** the preserved basis — if that basis later 404s, a
+  `tokenGrantedAt`-derived scan starts after the re-consent and permanently
+  skips the mail in between (violates US-11.1). Epoch is therefore the only
+  safe degradation; the wide scan it implies for a very old legacy row is
+  accepted per §9's residual risk (sender-filtered, ≤100 users).
 
-After a successful fallback scan: same insert → `advanceBasis` → deliver
-sequence, except the new basis comes from `users.getProfile({ userId })`
-(`response.data.historyId`) because `messages.list` carries no history id.
-`getProfile` runs **after** the scan and inserts; mail arriving in between is
+After a successful fallback scan: `getProfile` runs **after** the scan and
+**before** the inserts — the full order is scan → `getProfile` → inserts →
+`advanceBasis` → deliver — and the new basis comes from
+`users.getProfile({ userId })` (`response.data.historyId`) because
+`messages.list` carries no history id. Mail arriving in between is
 covered by its own push (pushes start from the Pub/Sub payload's
 `historyId`, not from our stored basis).
 
