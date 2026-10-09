@@ -44,6 +44,14 @@ describe("getMessageIds", () => {
         await expect(getMessageIds(gmail, "u@b.c", "100")).rejects.toThrow("No new history id provided");
     });
 
+    it("throws when a page repeats its nextPageToken", async () => {
+        const { gmail } = makeGmail([
+            { history: added("m1"), nextPageToken: "t1", historyId: "101" },
+            { history: added("m2"), nextPageToken: "t1", historyId: "102" },
+        ]);
+        await expect(getMessageIds(gmail, "u@b.c", "100")).rejects.toThrow("Repeated history page token");
+    });
+
     it("returns an empty id list when nothing was added", async () => {
         const { gmail } = makeGmail([{ history: [], historyId: "101" }]);
         await expect(getMessageIds(gmail, "u@b.c", "100"))

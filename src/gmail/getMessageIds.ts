@@ -17,9 +17,14 @@ export async function getMessageIds(gmail:gmail_v1.Gmail,email:string,startId:st
         if(response.data.historyId)
             newHistoryId=response.data.historyId;
         const nextPage=response.data.nextPageToken;
-        pageToken=typeof nextPage==='string'&&!seenTokens.has(nextPage)?nextPage:undefined;
-        if(typeof nextPage==='string')
+        if(typeof nextPage==='string'){
+            if(seenTokens.has(nextPage))
+                throw new Error('Repeated history page token');
             seenTokens.add(nextPage);
+            pageToken=nextPage;
+        }else{
+            pageToken=undefined;
+        }
     }while(pageToken!==undefined);
     if(!newHistoryId)
         throw new Error('No new history id provided');

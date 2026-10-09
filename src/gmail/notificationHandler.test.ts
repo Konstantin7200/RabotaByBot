@@ -21,6 +21,7 @@ import { advanceBasis, getMailbox, setAccessFailure } from "../db/mailboxReposit
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
 import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
+import { getUserGmailClient } from "./getUserGmailClient";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
 import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR } from "../constants";
 
@@ -119,6 +120,7 @@ describe("notificationHandler", () => {
         const res = makeResponse();
         await notificationHandler(makeRequest(), res as never);
         expect(getMessageIds).not.toHaveBeenCalled();
+        expect(getUserGmailClient).not.toHaveBeenCalled();
         expect(notifyMailboxOwner).not.toHaveBeenCalled();
         expect(setAccessFailure).not.toHaveBeenCalled();
         expect(res.status).toHaveBeenCalledWith(500);
