@@ -22,6 +22,27 @@
       "when": 1791549500271,
       "tag": "0002_bored_doorman",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791566000617,
+      "tag": "0003_uneven_talkback",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791567119004,
+      "tag": "0004_parched_firebrand",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791568039381,
+      "tag": "0005_fresh_captain_flint",
+      "breakpoints": true
     }
   ]
 }
