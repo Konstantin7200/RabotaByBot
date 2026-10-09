@@ -25,7 +25,7 @@ import { getUserGmailClient } from "./getUserGmailClient";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
 import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR } from "../constants";
 
-const mailbox = { id: 7, email: "a@b.c", refreshToken: "refresh-token", accessStatus: "active" };
+const mailbox = { id: 7, email: "a@b.c", refreshToken: "refresh-token", accessStatus: "active", historyIdBasis: null as string | null };
 const messageData = (gmailMessageId: string) => ({
     gmailMessageId,
     subject: "Subject",
@@ -56,7 +56,7 @@ beforeEach(() => {
     vi.mocked(getMessageIds).mockResolvedValue({ messageIds: ["m1"], newHistoryId: "101" });
     vi.mocked(getDataFromMessages).mockResolvedValue([messageData("m1")]);
     vi.mocked(addNotifications).mockResolvedValue(null as never);
-    vi.mocked(advanceBasis).mockResolvedValue(undefined);
+    vi.mocked(advanceBasis).mockResolvedValue(true);
     vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("terminal");
 });
 
@@ -71,6 +71,26 @@ describe("notificationHandler", () => {
         expect(advanceBasis).toHaveBeenCalledWith(7, "101");
         expect(deliverBatchUntilTerminal).toHaveBeenCalledWith([11, 12]);
         expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it("scans from the stored basis, not the push cursor (FR-3/FR-7)", async () => {
+        vi.mocked(getMailbox).mockResolvedValue({ ...mailbox, historyIdBasis: "90" } as never);
+        vi.mocked(listByMessageIds).mockResolvedValue([{ id: 11 }] as never);
+
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+
+        expect(vi.mocked(getMessageIds).mock.calls[0][2]).toBe("90");
+        expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it("falls back to the push historyId when no basis is stored", async () => {
+        vi.mocked(listByMessageIds).mockResolvedValue([{ id: 11 }] as never);
+
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+
+        expect(vi.mocked(getMessageIds).mock.calls[0][2]).toBe("100");
     });
 
     it("nacks with 503 when the batch loop reports budget_exceeded", async () => {
@@ -161,3 +181,4 @@ describe("notificationHandler", () => {
         expect(res.status).toHaveBeenCalledWith(500);
     });
 });
+

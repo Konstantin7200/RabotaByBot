@@ -40,7 +40,7 @@ beforeEach(() => {
     vi.mocked(getDataFromMessages).mockResolvedValue([messageData("m1")]);
     vi.mocked(addNotifications).mockResolvedValue(1);
     vi.mocked(listByMessageIds).mockResolvedValue([{ id: 11 }] as never);
-    vi.mocked(advanceBasis).mockResolvedValue(undefined);
+    vi.mocked(advanceBasis).mockResolvedValue(true);
     vi.mocked(setAccessFailure).mockResolvedValue(undefined as never);
     vi.mocked(notifyMailboxOwner).mockResolvedValue(undefined as never);
     vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("terminal");
@@ -147,3 +147,4 @@ describe("catchUpMailbox — messages.list fallback on stale history id", () => 
         expect(advanceBasis).not.toHaveBeenCalled();
     });
 });
+

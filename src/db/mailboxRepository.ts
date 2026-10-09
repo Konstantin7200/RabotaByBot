@@ -76,8 +76,18 @@ export async function setLastDeliveredAt(id:number,lastDeliveredAt:Date) {
 // basis must never advance past messages that have no journal row yet.
 // historyIdBasisAt is stamped together with the basis so the wall-clock time
 // always matches the basis write it accompanies.
-export async function advanceBasis(id:number,historyIdBasis:string) {
+// Monotonic: an out-of-order push must never move the basis backwards.
+export async function advanceBasis(id:number,historyIdBasis:string):Promise<boolean> {
+    const current=await db.select({basis:mailboxesTable.historyIdBasis}).from(mailboxesTable).where(eq(mailboxesTable.id,id)).limit(1);
+    const existing=current[0]?.basis??null;
+    if(existing!==null&&isHistoryIdValue(existing)&&isHistoryIdValue(historyIdBasis)&&BigInt(historyIdBasis)<=BigInt(existing))
+        return false;
     await db.update(mailboxesTable).set({historyIdBasis, historyIdBasisAt:new Date()}).where(eq(mailboxesTable.id,id));
+    return true;
+}
+
+function isHistoryIdValue(value:string):boolean {
+    return /^[0-9]+$/.test(value);
 }
 
 export async function listActive() {

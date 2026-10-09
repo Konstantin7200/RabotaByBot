@@ -44,7 +44,10 @@ export async function notificationHandler(req: Request, res: Response) {
             return;
         }
         const gmail=getUserGmailClient(mailbox.refreshToken);
-        const {messageIds,newHistoryId}=await getMessageIds(gmail,decoded.emailAddress,decoded.historyId);
+        // Scan from the stored basis, not the push cursor: a missed or
+        // out-of-order push would otherwise skip the delta (FR-3/FR-7).
+        const startHistoryId=mailbox.historyIdBasis??decoded.historyId;
+        const {messageIds,newHistoryId}=await getMessageIds(gmail,decoded.emailAddress,startHistoryId);
         const messageData=await getDataFromMessages(gmail,messageIds,decoded.emailAddress);
         try{
             const notifications:AddNotificationType[]=messageData.map((val)=>{
