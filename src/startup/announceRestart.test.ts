@@ -26,7 +26,7 @@ describe("announceRestart", () => {
     it("notifies every active chat when no heartbeat exists yet", async () => {
         vi.mocked(getHeartbeat).mockResolvedValue(null);
         vi.mocked(listActive).mockResolvedValue(active as never);
-        await announceRestart(now);
+        await expect(announceRestart(now)).resolves.toBe(true);
         expect(sendMessage).toHaveBeenCalledTimes(2);
         expect(sendMessage).toHaveBeenCalledWith(42, MESSAGE_BACK_ONLINE);
         expect(sendMessage).toHaveBeenCalledWith(43, MESSAGE_BACK_ONLINE);
@@ -44,7 +44,7 @@ describe("announceRestart", () => {
     it("stays silent on a routine restart with a fresh heartbeat", async () => {
         vi.mocked(getHeartbeat).mockResolvedValue(new Date(now.getTime() - DOWNTIME_THRESHOLD_MS + 1));
         vi.mocked(listActive).mockResolvedValue(active as never);
-        await announceRestart(now);
+        await expect(announceRestart(now)).resolves.toBe(false);
         expect(listActive).not.toHaveBeenCalled();
         expect(sendMessage).not.toHaveBeenCalled();
         expect(touchHeartbeat).toHaveBeenCalledWith(now);
@@ -62,7 +62,7 @@ describe("announceRestart", () => {
         vi.mocked(getHeartbeat).mockResolvedValue(null);
         vi.mocked(listActive).mockResolvedValue(active as never);
         vi.mocked(sendMessage).mockRejectedValue(new Error("blocked"));
-        await expect(announceRestart(now)).resolves.toBeUndefined();
+        await expect(announceRestart(now)).resolves.toBe(true);
         expect(sendMessage).toHaveBeenCalledTimes(2);
         expect(touchHeartbeat).toHaveBeenCalledWith(now);
     });

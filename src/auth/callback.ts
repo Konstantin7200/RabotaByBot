@@ -8,6 +8,7 @@ import { createIfNotExists, getByChatId, getChatIdByUserId } from "../db/userRep
 import { InsertedMailbox, InsertedUser, MailboxesTable } from "../db/entityTypes";
 import { createMailbox, getByUserId, getMailbox } from "../db/mailboxRepository";
 import { watch } from "../gmail/watch";
+import { catchUpMailbox } from "../gmail/catchUpMailbox";
 import { untrackMailbox } from "../gmail/untrackMailbox";
 import { sendMessage } from "../bot/sendMessage";
 import {
@@ -110,6 +111,10 @@ export async function callback(req:Request,res:Response){
         await watch(email,tokens.refreshToken,tokens.accessToken);
         notifyChat(chatId,chooseLoginMessage(email,previousStatus));
         res.status(200).sendFile(join(PUBLIC_DIR,"success.html"));
+        if (existing !== null && existing.historyIdBasis !== null)
+            void getMailbox(email)
+                .then((m) => (m === null ? undefined : catchUpMailbox(m)))
+                .catch((err) => console.log({ event: "catch_up_failed", email, err: String(err) }));
         return [tokens]
     } catch(err){
         console.log(err);
