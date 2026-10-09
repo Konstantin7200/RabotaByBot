@@ -1,7 +1,8 @@
 import { Cron } from "croner";
-import { DELIVERY_TICK, WATCH_RENEWAL_TICK } from "../constants";
+import { DELIVERY_TICK, HEARTBEAT_TICK, WATCH_RENEWAL_TICK } from "../constants";
 import { renewWatches } from "./jobs/renewWatches";
 import { runDeliveryPass } from "./jobs/deliverNotifications";
+import { heartbeat } from "./jobs/heartbeat";
 
 const jobs: Cron[] = [];
 
@@ -26,6 +27,16 @@ export function startScheduler() {
     }, runDeliveryPass);
     jobs.push(deliveryJob);
     deliveryJob.trigger();
+    const heartbeatJob = new Cron(HEARTBEAT_TICK, {
+        protect: () => {
+            console.log({ event: "job_skipped_overlap", job: "heartbeat" });
+        },
+        catch: (err) => {
+            console.log({ event: "job_error", job: "heartbeat", err: String(err) });
+        },
+    }, heartbeat);
+    jobs.push(heartbeatJob);
+    heartbeatJob.trigger();
     console.log({
         event: "scheduler_started",
         job: "renew_watches",
@@ -37,6 +48,12 @@ export function startScheduler() {
         job: "deliver_notifications",
         tick: DELIVERY_TICK,
         nextRun: deliveryJob.nextRun(),
+    });
+    console.log({
+        event: "scheduler_started",
+        job: "heartbeat",
+        tick: HEARTBEAT_TICK,
+        nextRun: heartbeatJob.nextRun(),
     });
 }
 

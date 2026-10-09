@@ -11,6 +11,7 @@ import { watch } from "../gmail/watch";
 import { untrackMailbox } from "../gmail/untrackMailbox";
 import { sendMessage } from "../bot/sendMessage";
 import {
+    chooseLoginMessage,
     createReplacedMailboxMessage,
     MESSAGE_MAILBOX_RELINKED,
     MESSAGE_FOR_AUTH_CANCELLED,
@@ -91,6 +92,7 @@ export async function callback(req:Request,res:Response){
         if(typeof email!=='string')
             throw new Error('No email in id_token');
         const existing=await getMailbox(email);
+        const previousStatus=existing!==null?existing.accessStatus:null;
         const previousChatId=existing!==null&&existing.userId!==null
             ? await getChatIdByUserId(existing.userId)
             : null;
@@ -106,7 +108,7 @@ export async function callback(req:Request,res:Response){
         if(previousChatId!==null&&Number(previousChatId)!==chatId)
             await notifyPreviousOwner(Number(previousChatId),email);
         await watch(email,tokens.refreshToken,tokens.accessToken);
-        notifyChat(chatId,"You were successfully logged in");
+        notifyChat(chatId,chooseLoginMessage(email,previousStatus));
         res.status(200).sendFile(join(PUBLIC_DIR,"success.html"));
         return [tokens]
     } catch(err){

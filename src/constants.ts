@@ -20,6 +20,16 @@ export const MESSAGE_WATCH_RENEW_ERROR=(email:string)=>
     `Could not renew tracking for ${email} (Google API error).\nRun /start to re-link if it persists`;
 export const MESSAGE_MAIL_PROCESSING_ERROR=(email:string)=>
     `Could not process new mail for ${email} (Google API error).\nRun /start to re-link if it persists`;
+export const MESSAGE_LOGIN_SUCCESS='You were successfully logged in';
+export const MESSAGE_ACCESS_RESTORED=(email:string)=>
+    `Access to ${email} restored.\nMail tracking is running again`;
+export const MESSAGE_BACK_ONLINE='Back online.\nMail tracking is running again';
+export const chooseLoginMessage=(email:string,previousStatus:string|null)=>
+    previousStatus==='expired'||previousStatus==='revoked'||previousStatus==='error'
+        ? MESSAGE_ACCESS_RESTORED(email)
+        : MESSAGE_LOGIN_SUCCESS;
+export const DOWNTIME_THRESHOLD_MS=5*60*1000;
+export const HEARTBEAT_TICK='*/1 * * * *';
 export const MESSAGE_FOR_NO_MAILBOX_CONNECTED='No mailbox is connected right now run.\nRun /start to connect one';
 export const MESSAGE_FOR_UNLINK_CONFIRMATION=(email:string,scopes:string)=>
     `Mailbox ${email} has been unlinked.\nWatch stopped, access revoked (${scopes}).\nRun /start to connect a mailbox again`;
