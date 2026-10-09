@@ -37,3 +37,7 @@ export function classifyAccessError(err: unknown): AccessErrorKind {
         return "transient";
     return "error";
 }
+
+export function isHistoryUnavailable(err: unknown): boolean {
+    return getStatusCode(err) === 404;
+}

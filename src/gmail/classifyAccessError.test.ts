@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyAccessError } from "./classifyAccessError";
+import { classifyAccessError, isHistoryUnavailable } from "./classifyAccessError";
 
 function gaxiosError(props: { code?: number | string; responseStatus?: number; message?: string }) {
     const err = new Error(props.message ?? "boom") as Error & {
@@ -54,5 +54,19 @@ describe("classifyAccessError", () => {
         expect(classifyAccessError(undefined)).toBe("transient");
         expect(classifyAccessError("something odd")).toBe("transient");
         expect(classifyAccessError(new Error("boom"))).toBe("transient");
+    });
+});
+
+describe("isHistoryUnavailable", () => {
+    it("is true for a 404 from either code or response status", () => {
+        expect(isHistoryUnavailable(gaxiosError({ code: 404 }))).toBe(true);
+        expect(isHistoryUnavailable(gaxiosError({ responseStatus: 404 }))).toBe(true);
+    });
+    it("is false for anything else", () => {
+        expect(isHistoryUnavailable(gaxiosError({ code: 403 }))).toBe(false);
+        expect(isHistoryUnavailable(gaxiosError({ responseStatus: 500 }))).toBe(false);
+        expect(isHistoryUnavailable(gaxiosError({ code: "ETIMEDOUT" }))).toBe(false);
+        expect(isHistoryUnavailable(new Error("invalid_grant"))).toBe(false);
+        expect(isHistoryUnavailable(undefined)).toBe(false);
     });
 });
