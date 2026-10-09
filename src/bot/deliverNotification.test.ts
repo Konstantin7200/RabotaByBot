@@ -15,6 +15,7 @@ const row = {
     id: 7, mailboxId: 3, gmailMessageId: "m1", status: "pending" as const, attempts: 0,
     nextAttemptAt: new Date(), fromHeader: null, subject: "s", vacancy: "Dev",
     employer: "ACME", outcome: "Приглашение", sentAt: null, lastError: null, createdAt: new Date(),
+    replayedAt: null,
 };
 
 beforeEach(() => vi.clearAllMocks());

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, inArray, lt, lte } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 import { db } from ".";
 import { InsertedNotification } from "./entityTypes";
 import { notificationsTable } from "./schema";
@@ -62,27 +62,36 @@ export async function recordFailure(id: number, error: string) {
     await db.update(notificationsTable).set(updateBody).where(eq(notificationsTable.id, id));
 }
 
-export async function markStaleAsSent() {
-    const rows = await db.update(notificationsTable).set({ status: 'sent' }).where(and(
+function pendingAgeExpr() {
+    return sql`coalesce(${notificationsTable.replayedAt}, ${notificationsTable.createdAt})`;
+}
+
+function staleCutoff(now: Date) {
+    return new Date(now.getTime() - STALE_PENDING_MS);
+}
+
+export async function markStaleAsSent(now: Date = new Date()) {
+    const rows = await db.update(notificationsTable).set({ status: 'sent', sentAt: now }).where(and(
         eq(notificationsTable.status, 'pending'),
-        lt(notificationsTable.createdAt, new Date(Date.now() - STALE_PENDING_MS)),
+        sql`${pendingAgeExpr()} < ${staleCutoff(now)}`,
     )).returning();
     return rows.length;
 }
 
-export async function claimDueRetries() {
+export async function claimDueRetries(now: Date = new Date()) {
     return db.select().from(notificationsTable).where(and(
         eq(notificationsTable.status, 'pending'),
-        lte(notificationsTable.nextAttemptAt, new Date()),
-        gt(notificationsTable.createdAt, new Date(Date.now() - STALE_PENDING_MS)),
+        lte(notificationsTable.nextAttemptAt, now),
+        sql`${pendingAgeExpr()} > ${staleCutoff(now)}`,
     ));
 }
 
-export async function replayFailed() {
+export async function replayFailed(now: Date = new Date()) {
     const rows = await db.update(notificationsTable).set({
         status: 'pending',
         attempts: 0,
-        nextAttemptAt: new Date(),
+        nextAttemptAt: now,
+        replayedAt: now,
     }).where(eq(notificationsTable.status, 'failed')).returning();
     return rows.length;
 }

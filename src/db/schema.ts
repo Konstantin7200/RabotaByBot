@@ -67,6 +67,10 @@ export const notificationsTable = pgTable(
         sentAt: timestamp({ withTimezone: true }),
         lastError: text(),
         createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+        // Set when a `failed` row is replayed by the catch-up pass; the stale
+        // window (FR-7) is measured from this moment instead of createdAt so
+        // replayed rows get a real delivery attempt (FR-11).
+        replayedAt: timestamp({ withTimezone: true }),
     },
     (table) => [
         uniqueIndex("notifications_mailbox_id_gmail_message_id_unique").on(
