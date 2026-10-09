@@ -6,8 +6,8 @@ import { getTokens } from "./getTokens";
 import { takeKey } from "../db/oauthKeysRepository";
 import { createIfNotExists, getByChatId, getChatIdByUserId } from "../db/userRepository";
 import { InsertedMailbox, InsertedUser, MailboxesTable } from "../db/entityTypes";
-import { createMailbox, getByUserId, getMailbox } from "../db/mailboxRepository";
-import { watch } from "../gmail/watch";
+import { createMailbox, getByUserId, getMailbox, setWatchSuccess } from "../db/mailboxRepository";
+import { installWatch } from "../gmail/watch";
 import { catchUpMailbox } from "../gmail/catchUpMailbox";
 import { untrackMailbox } from "../gmail/untrackMailbox";
 import { sendMessage } from "../bot/sendMessage";
@@ -25,7 +25,7 @@ async function unlinkReplacedMailbox(oldMailbox:MailboxesTable,newEmail:string,c
     try{
         await sendMessage(chatId,createReplacedMailboxMessage(oldMailbox.email,newEmail));
     } catch(err){
-        console.log(err);
+        console.log({event:"notify_replaced_mailbox_failed",err:String(err)});
     }
 }
 
@@ -33,7 +33,7 @@ async function notifyPreviousOwner(oldChatId:number,email:string){
     try{
         await sendMessage(oldChatId,MESSAGE_MAILBOX_RELINKED(email));
     } catch(err){
-        console.log(err);
+        console.log({event:"notify_previous_owner_failed",err:String(err)});
     }
 }
 
@@ -45,9 +45,9 @@ function notifyChat(chatId:number|null,text:string){
     if(chatId===null)
         return;
     try{
-        sendMessage(chatId,text).catch((err)=>console.log(err));
+        sendMessage(chatId,text).catch((err)=>console.log({event:"notify_chat_failed",err:String(err)}));
     } catch(err){
-        console.log(err);
+        console.log({event:"notify_chat_failed",err:String(err)});
     }
 }
 
@@ -72,6 +72,7 @@ export async function callback(req:Request,res:Response){
         }
         const code=req.query['code'];
         if(typeof code!=='string'){
+            notifyChat(chatId,MESSAGE_FOR_AUTH_FAILED);
             respondError(res,400);
             return;
         }
@@ -98,6 +99,9 @@ export async function callback(req:Request,res:Response){
             ? await getChatIdByUserId(existing.userId)
             : null;
         const oldMailbox=await getByUserId(user.id);
+        // Install the watch before persisting anything: a failed watch must
+        // leave the previous linkage untouched (US-1 CA3).
+        const {historyId,expirationDate}=await installWatch(email,tokens.refreshToken,tokens.accessToken);
         if(oldMailbox!==null&&oldMailbox.email!==email)
             await unlinkReplacedMailbox(oldMailbox,email,chatId);
         const mailboxToCreate:InsertedMailbox={
@@ -106,9 +110,10 @@ export async function callback(req:Request,res:Response){
             refreshToken:tokens.refreshToken
         };
         await createMailbox(mailboxToCreate);
+        await setWatchSuccess(email,historyId,expirationDate);
         if(previousChatId!==null&&Number(previousChatId)!==chatId)
             await notifyPreviousOwner(Number(previousChatId),email);
-        await watch(email,tokens.refreshToken,tokens.accessToken);
+        console.log({event:"oauth_linked",email});
         notifyChat(chatId,chooseLoginMessage(email,previousStatus));
         res.status(200).sendFile(join(PUBLIC_DIR,"success.html"));
         if (existing !== null && existing.historyIdBasis !== null)
@@ -117,7 +122,7 @@ export async function callback(req:Request,res:Response){
                 .catch((err) => console.log({ event: "catch_up_failed", email, err: String(err) }));
         return [tokens]
     } catch(err){
-        console.log(err);
+        console.log({event:"oauth_callback_failed",chatId,err:String(err)});
         notifyChat(chatId,MESSAGE_FOR_AUTH_FAILED);
         respondError(res,500);
     }

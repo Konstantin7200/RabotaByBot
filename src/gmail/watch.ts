@@ -3,7 +3,7 @@ import { setWatchSuccess } from "../db/mailboxRepository";
 import { getUserGmailClient } from "./getUserGmailClient";
 import { parseExpiration } from "./parseExpiration";
 
-export async function watch(email:string,refresh_token:string,access_token?:string){
+export async function installWatch(email:string,refresh_token:string,access_token?:string){
     const gmail=getUserGmailClient(refresh_token,access_token);
     const response=await gmail.users.watch({
         userId:email,
@@ -16,6 +16,11 @@ export async function watch(email:string,refresh_token:string,access_token?:stri
         throw new Error('History id is undefined');
     if(typeof expiration!=='string')
         throw new Error('Expiration is undefined');
-    await setWatchSuccess(email,historyId,parseExpiration(expiration));
-    return {historyId,expiration};
+    return {historyId,expirationDate:parseExpiration(expiration)};
+}
+
+export async function watch(email:string,refresh_token:string,access_token?:string){
+    const {historyId,expirationDate}=await installWatch(email,refresh_token,access_token);
+    await setWatchSuccess(email,historyId,expirationDate);
+    return {historyId,expiration:expirationDate.toISOString()};
 }
