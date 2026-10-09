@@ -7,6 +7,7 @@ type ConfigType={
     publicBaseUrl:string,
     tokenEncryptionKey:string,
     rabotaSubjectPatterns:string[],
+    googleConsentMode:'testing'|'production',
     googleAuth:{
         clientId:string,
         secret:string,
@@ -24,6 +25,7 @@ type UnvalidatedConfigType= {
     publicBaseUrl:unknown,
     tokenEncryptionKey:unknown,
     rabotaSubjectPatterns:unknown,
+    googleConsentMode:unknown,
     googleAuth:{
         clientId:unknown,
         secret:unknown,
@@ -41,6 +43,7 @@ type ValidatedConfigType={
     publicBaseUrl:string,
     tokenEncryptionKey:string,
     rabotaSubjectPatterns:string[],
+    googleConsentMode:'testing'|'production',
     googleAuth:{
         clientId:string,
         secret:string,
@@ -60,6 +63,7 @@ function createConfig():ConfigType{
         rabotaSubjectPatterns:typeof process.env.RABOTA_SUBJECT_PATTERNS==='string'
             ? process.env.RABOTA_SUBJECT_PATTERNS.split(',').map((item)=>item.trim()).filter((item)=>item!=='')
             : [],
+        googleConsentMode:process.env.GOOGLE_CONSENT_MODE??'testing',
         publicBaseUrl:typeof process.env.PUBLIC_BASE_URL==='string'
             ? process.env.PUBLIC_BASE_URL.replace(/\/+$/,'')
             : process.env.PUBLIC_BASE_URL,
@@ -93,6 +97,8 @@ function validateConfig(config:UnvalidatedConfigType):config is ValidatedConfigT
     if(typeof config.tokenEncryptionKey!=='string'||!/^[0-9a-fA-F]{64}$/.test(config.tokenEncryptionKey))
         return false;
     if(!Array.isArray(config.rabotaSubjectPatterns))
+        return false;
+    if(config.googleConsentMode!=='testing'&&config.googleConsentMode!=='production')
         return false;
     if(typeof config.publicBaseUrl!=='string'||config.publicBaseUrl.trim()==="")
         return false;

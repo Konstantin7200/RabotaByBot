@@ -70,4 +70,10 @@ describe("EnvConfig", () => {
         const config = await loadConfig({ RABOTA_SUBJECT_PATTERNS: undefined });
         expect(config.rabotaSubjectPatterns).toEqual([]);
     });
+
+    it("defaults googleConsentMode to testing and accepts production", async () => {
+        expect((await loadConfig({ GOOGLE_CONSENT_MODE: undefined })).googleConsentMode).toBe("testing");
+        expect((await loadConfig({ GOOGLE_CONSENT_MODE: "production" })).googleConsentMode).toBe("production");
+        await expect(loadConfig({ GOOGLE_CONSENT_MODE: "weird" })).rejects.toThrow();
+    });
 });
