@@ -20,7 +20,7 @@ vi.mock("../db/mailboxRepository", () => ({
 }));
 vi.mock("../gmail/watch", () => ({ installWatch: vi.fn() }));
 vi.mock("../gmail/catchUpMailbox", () => ({ catchUpMailbox: vi.fn() }));
-vi.mock("../gmail/untrackMailbox", () => ({ untrackMailbox: vi.fn() }));
+vi.mock("../gmail/untrackMailbox", () => ({ untrackMailbox: vi.fn(async () => ({ stopped: true, revoked: true })) }));
 vi.mock("../bot/sendMessage", () => ({ sendMessage: vi.fn() }));
 vi.mock("./getTokens", () => ({ getTokens: vi.fn() }));
 vi.mock("./index", () => ({
