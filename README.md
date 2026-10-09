@@ -25,6 +25,8 @@ flowchart LR
     CRON[Scheduler cron] --> R[renew watches daily\nFR-10]
     CRON --> D[delivery retries every 10 s\nFR-11]
     CRON --> C[catch-up pass 03:00\nFR-14]
+    CRON --> W[warn on expiring login\nUS-8]
+    CRON --> RT[retention cleanup 04:00\n30 days]
     R --> GAPI
     C --> H
     D --> TGS
@@ -97,7 +99,8 @@ with a sleeping free tier violates the latency requirement — do not use one.
   `https://` origin (no trailing slash).
 - On boot the bot registers the Telegram webhook
   (`PUBLIC_BASE_URL/telegram/webhook`) and renews Gmail watches at least daily.
-- `SIGTERM`/`SIGINT` shut the scheduler down and close the HTTP server.
+- `SIGTERM`/`SIGINT` stop the scheduler, drain in-flight jobs (up to 5 s) and
+  close the HTTP server; a 10 s force-exit is the backstop.
 
 ## Open risks and accepted deviations
 
@@ -105,8 +108,9 @@ with a sleeping free tier violates the latency requirement — do not use one.
 |---|---|
 | Real Rabota.by letter format (sender, subject templates) **not yet confirmed** (§6.3 of the assignment). The domain filter (`rabota.by`) and subject parsing patterns are best-effort and unconfirmed. | Open — verify against a real reply sample before trusting FR-5/FR-6 in production. |
 | FR-5 "matches the response template" gate | Partial: every letter from the `rabota.by` domain notifies by default; set `RABOTA_SUBJECT_PATTERNS` (comma-separated subject substrings) to enable the gate once real subjects are confirmed. |
-| US-9 / US-10 transient failures | Deviation (deliberate): quick transient Gmail errors do not message the user; only persistent failures and hard access loss do. No spam for recovered blips. |
-| Journal retention | Sent rows are kept indefinitely (spec allows ≥ catch-up window); pruning is not wired up yet. |
+| US-9 / US-10 transient failures | Narrowed scope (agreed): quick transient Gmail errors do not message the user; a notice is sent only after 3 consecutive failures (once), and a "working again" message only goes to owners who were notified. Hard access loss still messages immediately (FR-12). |
+| Journal retention | Sent rows older than 30 days are deleted by the daily `retention_cleanup` job (04:00); pending/failed rows are kept until they reach a terminal state. |
+| Google consent screen mode | `GOOGLE_CONSENT_MODE=testing` (default): refresh tokens expire in 7 days; `/status` shows the computed expiry and a once-per-grant advance warning is sent 24 h before it (US-8). Set `production` to drop the fixed-expiry messaging. |
 
 ## Manual acceptance checklist (release gate)
 
