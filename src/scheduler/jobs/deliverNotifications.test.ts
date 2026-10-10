@@ -5,7 +5,7 @@ vi.mock("../../db/notificationRepository", () => ({
 }));
 vi.mock("../../bot/deliverNotification", () => ({ deliverNotification: vi.fn() }));
 
-import { runDeliveryPass } from "./deliverNotifications";
+import { runDeliveryPass, sweepStaleOnBoot } from "./deliverNotifications";
 import { claimDueRetries, markStaleAsSent } from "../../db/notificationRepository";
 import { deliverNotification } from "../../bot/deliverNotification";
 
@@ -19,14 +19,11 @@ beforeEach(() => {
 });
 
 describe("runDeliveryPass", () => {
-    it("delivers every claimed row and marks stale rows first", async () => {
-        vi.mocked(markStaleAsSent).mockResolvedValue(2);
+    it("delivers every claimed row without ever sweeping stale rows (FR-7 recovery-time rule)", async () => {
         vi.mocked(claimDueRetries).mockResolvedValue([rowA, rowB]);
         await runDeliveryPass();
-        expect(markStaleAsSent).toHaveBeenCalledTimes(1);
+        expect(markStaleAsSent).not.toHaveBeenCalled();
         expect(vi.mocked(deliverNotification).mock.calls.map((c) => c[0])).toEqual([rowA, rowB]);
-        expect(vi.mocked(markStaleAsSent).mock.invocationCallOrder[0])
-            .toBeLessThan(vi.mocked(claimDueRetries).mock.invocationCallOrder[0]);
     });
 
     it("does nothing when nothing is due", async () => {
@@ -52,10 +49,23 @@ describe("runDeliveryPass", () => {
     });
 
     it("re-arms the mutex after a rejected pass settles", async () => {
-        vi.mocked(markStaleAsSent).mockRejectedValueOnce(new Error("db down"));
+        vi.mocked(claimDueRetries).mockRejectedValueOnce(new Error("db down"));
         await expect(runDeliveryPass()).rejects.toThrow("db down");
         await runDeliveryPass();
-        expect(markStaleAsSent).toHaveBeenCalledTimes(2);
-        expect(claimDueRetries).toHaveBeenCalledTimes(1);
+        expect(claimDueRetries).toHaveBeenCalledTimes(2);
+        expect(markStaleAsSent).not.toHaveBeenCalled();
+    });
+});
+
+describe("sweepStaleOnBoot (FR-7)", () => {
+    it("treats pending rows older than the window as delivered, once per boot", async () => {
+        vi.mocked(markStaleAsSent).mockResolvedValue(3);
+        await sweepStaleOnBoot();
+        expect(markStaleAsSent).toHaveBeenCalledTimes(1);
+    });
+
+    it("swallows sweep failures so boot cannot be blocked", async () => {
+        vi.mocked(markStaleAsSent).mockRejectedValue(new Error("db down"));
+        await expect(sweepStaleOnBoot()).resolves.toBeUndefined();
     });
 });

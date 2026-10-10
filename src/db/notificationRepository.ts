@@ -70,6 +70,9 @@ function staleCutoff(now: Date) {
     return new Date(now.getTime() - STALE_PENDING_MS);
 }
 
+// FR-7: recovery-time rule only ("при восстановлении записи pending старше X").
+// Called from sweepStaleOnBoot() on boot, never from the regular delivery pass -
+// a routine restart must deliver rows, not sweep them (FR-11: no loss).
 export async function markStaleAsSent(now: Date = new Date()) {
     const rows = await db.update(notificationsTable).set({ status: 'sent', sentAt: now }).where(and(
         eq(notificationsTable.status, 'pending'),

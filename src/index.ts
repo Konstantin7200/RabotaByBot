@@ -3,6 +3,7 @@ import { getBot } from "./bot";
 import { createApp } from "./app";
 import { startScheduler, stopScheduler, waitForIdleJobs } from "./scheduler";
 import { runCatchUpPass } from "./scheduler/jobs/catchUpPass";
+import { sweepStaleOnBoot } from "./scheduler/jobs/deliverNotifications";
 import { announceRestart } from "./startup/announceRestart";
 
 const app = createApp();
@@ -25,6 +26,7 @@ const server = app.listen(EnvConfig.port, async () => {
   if (wasDown)
     void runCatchUpPass().catch((err) =>
       console.log({ event: "catch_up_startup_failed", err: String(err) }));
+  await sweepStaleOnBoot();
   startScheduler();
 });
 
