@@ -103,11 +103,13 @@ describe("FR-7/FR-11 staleness window (replay-aware)", () => {
     });
 
     it("listDeliverableByMailbox selects only pending rows younger than the window (FR-7 ack rule)", async () => {
-        await listDeliverableByMailbox(7);
-        const sqlText = whereSql();
-        expect(sqlText).toContain("mailboxId");
-        expect(sqlText).toContain("status");
-        expect(sqlText).toContain("coalesce");
-        expect(sqlText).toContain("replayedAt");
+        await listDeliverableByMailbox(7, new Date("2026-01-01T00:10:00Z"));
+        const query = dialect.sqlToQuery(captured.where as never);
+        expect(query.sql).toContain(">");
+        expect(query.sql).not.toContain("<");
+        expect(query.params).toContain("pending");
+        expect(query.params).toContain(7);
+        expect(query.sql).toContain("coalesce");
+        expect(query.sql).toContain("replayedAt");
     });
 });

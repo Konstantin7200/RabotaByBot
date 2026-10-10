@@ -40,6 +40,13 @@ describe("untrackMailbox (FR-9)", () => {
         expect(unlinkMailbox).toHaveBeenCalledWith(3);
     });
 
+    it("still completes Google-side cleanup when the local unlink fails", async () => {
+        vi.mocked(unlinkMailbox).mockRejectedValue(new Error("db down"));
+        await expect(untrackMailbox(mailbox)).rejects.toThrow("db down");
+        expect(stopWatching).toHaveBeenCalledWith("a@b.c", "rt");
+        expect(revokeToken).toHaveBeenCalledWith("rt");
+    });
+
     it("unlinks the mailbox locally even when the token is unreadable", async () => {
         await expect(untrackMailbox({ id: 7, email: "a@b.c", refreshToken: null, userId: 3 } as never))
             .resolves.toEqual({ stopped: false, revoked: false });

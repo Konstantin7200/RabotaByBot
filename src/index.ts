@@ -19,7 +19,10 @@ const server = app.listen(EnvConfig.port, async () => {
   }
   let wasDown = false;
   try {
-    wasDown = await announceRestart();
+    // Boot must not stall on Telegram retries: sweep and scheduler start right
+    // after, so a flaky/unreachable API would delay delivery. One attempt here;
+    // sendWithRetry's attempts remain for all other notice call sites.
+    wasDown = await announceRestart(undefined, { attempts: 1 });
   } catch (err) {
     console.log({ event: "announce_restart_failed", err: String(err) });
   }
