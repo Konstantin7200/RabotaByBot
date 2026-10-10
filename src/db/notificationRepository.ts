@@ -36,6 +36,18 @@ export async function listByMessageIds(mailboxId: number, gmailMessageIds: strin
         inArray(notificationsTable.gmailMessageId, gmailMessageIds),
     ));
 }
+
+// Rows that still owe the user a delivery: pending and inside the FR-7 window.
+// Used by the push handler to decide whether an empty scan may be acked (FR-7:
+// ack only after sent or a durable failed - leftovers from an earlier attempt
+// of the same push must keep the push unacked until they reach terminal).
+export async function listDeliverableByMailbox(mailboxId: number, now: Date = new Date()) {
+    return db.select().from(notificationsTable).where(and(
+        eq(notificationsTable.mailboxId, mailboxId),
+        eq(notificationsTable.status, "pending"),
+        sql`${pendingAgeExpr()} > ${staleCutoff(now)}`,
+    ));
+}
 export async function getByIds(ids: number[]) {
     return db.select().from(notificationsTable).where(inArray(notificationsTable.id, ids));
 }

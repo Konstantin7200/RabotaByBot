@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../db/notificationRepository", () => ({
     addNotifications: vi.fn(),
     listByMessageIds: vi.fn(),
+    listDeliverableByMailbox: vi.fn(),
 }));
 vi.mock("../db/mailboxRepository", () => ({
     getMailbox: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock("./getUserGmailClient", () => ({ getUserGmailClient: vi.fn() }));
 vi.mock("../bot/notifyMailboxOwner", () => ({ notifyMailboxOwner: vi.fn() }));
 
 import { notificationHandler } from "./notificationHandler";
-import { addNotifications, listByMessageIds } from "../db/notificationRepository";
+import { addNotifications, listByMessageIds, listDeliverableByMailbox } from "../db/notificationRepository";
 import { advanceBasis, claimFailureNotice, getMailbox, registerPipelineSuccess, registerTransientFailure, setAccessFailure } from "../db/mailboxRepository";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
@@ -60,6 +61,7 @@ beforeEach(() => {
     vi.mocked(getMessageIds).mockResolvedValue({ messageIds: ["m1"], newHistoryId: "101" });
     vi.mocked(getDataFromMessages).mockResolvedValue([messageData("m1")]);
     vi.mocked(addNotifications).mockResolvedValue(null as never);
+    vi.mocked(listDeliverableByMailbox).mockResolvedValue([] as never);
     vi.mocked(advanceBasis).mockResolvedValue(true);
     vi.mocked(registerTransientFailure).mockResolvedValue(1);
     vi.mocked(claimFailureNotice).mockResolvedValue(true);
@@ -123,6 +125,32 @@ describe("notificationHandler", () => {
         expect(advanceBasis).toHaveBeenCalledWith(7, "101");
         expect(deliverBatchUntilTerminal).not.toHaveBeenCalled();
         expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it("does not ack an empty scan while rows from an earlier attempt are still pending (redelivery after budget_exceeded)", async () => {
+        vi.mocked(getMessageIds).mockResolvedValue({ messageIds: [], newHistoryId: "101" });
+        vi.mocked(listByMessageIds).mockResolvedValue([] as never);
+        vi.mocked(listDeliverableByMailbox).mockResolvedValue([{ id: 11 }, { id: 12 }] as never);
+        vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("terminal");
+
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+
+        expect(advanceBasis).toHaveBeenCalledWith(7, "101");
+        expect(deliverBatchUntilTerminal).toHaveBeenCalledWith([11, 12]);
+        expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it("nacks with 503 when leftover pending rows cannot reach terminal", async () => {
+        vi.mocked(getMessageIds).mockResolvedValue({ messageIds: [], newHistoryId: "101" });
+        vi.mocked(listByMessageIds).mockResolvedValue([] as never);
+        vi.mocked(listDeliverableByMailbox).mockResolvedValue([{ id: 11 }] as never);
+        vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("budget_exceeded");
+
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+
+        expect(res.status).toHaveBeenCalledWith(503);
     });
 
     it("acks with 200 and skips Gmail when the mailbox is unknown", async () => {

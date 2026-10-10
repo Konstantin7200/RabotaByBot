@@ -50,7 +50,7 @@ vi.mock("./index", () => {
     };
 });
 
-import { claimDueRetries, getRecentProblems, markStaleAsSent, replayFailed } from "./notificationRepository";
+import { claimDueRetries, getRecentProblems, listDeliverableByMailbox, markStaleAsSent, replayFailed } from "./notificationRepository";
 
 const dialect = new PgDialect();
 
@@ -100,5 +100,14 @@ describe("FR-7/FR-11 staleness window (replay-aware)", () => {
         await getRecentProblems(7);
         expect(whereSql()).toContain("coalesce");
         expect(whereSql()).toContain("replayedAt");
+    });
+
+    it("listDeliverableByMailbox selects only pending rows younger than the window (FR-7 ack rule)", async () => {
+        await listDeliverableByMailbox(7);
+        const sqlText = whereSql();
+        expect(sqlText).toContain("mailboxId");
+        expect(sqlText).toContain("status");
+        expect(sqlText).toContain("coalesce");
+        expect(sqlText).toContain("replayedAt");
     });
 });

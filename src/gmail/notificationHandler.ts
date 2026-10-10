@@ -3,7 +3,7 @@ import { isNotificationMessageBody } from "./validateNotificationBody";
 import { UnvalidatedNotificationBody, validateNotificationPayload } from "./validateNotificationPayload";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
-import { addNotifications, AddNotificationType, listByMessageIds } from "../db/notificationRepository";
+import { addNotifications, AddNotificationType, listByMessageIds, listDeliverableByMailbox } from "../db/notificationRepository";
 import { advanceBasis, getMailbox, setAccessFailure } from "../db/mailboxRepository";
 import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
 import { getUserGmailClient } from "./getUserGmailClient";
@@ -73,11 +73,16 @@ export async function notificationHandler(req: Request, res: Response) {
             const rows=await listByMessageIds(mailbox.id,messageData.map((m)=>m.gmailMessageId));
             await advanceBasis(mailbox.id,newHistoryId);
             await reportPipelineSuccess(mailbox.id, mailbox.email);
-            if(rows.length===0){
+            // A redelivery after budget_exceeded scans from the already-advanced
+            // basis and finds nothing, while the rows inserted by the earlier
+            // attempt may still be pending - fall back to every deliverable row
+            // of this mailbox so the push is acked only once they are terminal.
+            const targets=rows.length>0?rows:await listDeliverableByMailbox(mailbox.id);
+            if(targets.length===0){
                 res.status(200).send();
                 return;
             }
-            const outcome=await deliverBatchUntilTerminal(rows.map((r)=>r.id));
+            const outcome=await deliverBatchUntilTerminal(targets.map((r)=>r.id));
             res.status(outcome==='terminal'?200:503).send();
         }
         catch(err){
