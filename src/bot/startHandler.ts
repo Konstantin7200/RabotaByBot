@@ -6,5 +6,5 @@ export async function startHandler(ctx:Context){
     if(chatId===undefined)
         throw new Error(`Id is undefined ctx=${ctx}`);
     const url=await getAuthUrl(chatId);
-    ctx.reply(`Hi,please login\n${url}`);
+    return ctx.reply(`Hi,please login\n${url}`);
 }

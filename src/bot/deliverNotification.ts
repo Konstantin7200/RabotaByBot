@@ -30,4 +30,11 @@ export async function deliverNotification(notification: Notification): Promise<v
     await setNotificationDelivered(notification.gmailMessageId, notification.mailboxId);
     await setLastDeliveredAt(notification.mailboxId, new Date());
     await setChatStatus(chatId, "ok");
+    console.log({
+        event: "notification_sent",
+        id: notification.id,
+        mailboxId: notification.mailboxId,
+        gmailMessageId: notification.gmailMessageId,
+        chatId,
+    });
 }

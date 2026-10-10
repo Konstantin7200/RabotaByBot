@@ -37,7 +37,7 @@ export const chooseLoginMessage=(email:string,previousStatus:string|null)=>
         : MESSAGE_LOGIN_SUCCESS(email);
 export const DOWNTIME_THRESHOLD_MS=5*60*1000;
 export const HEARTBEAT_TICK='*/1 * * * *';
-export const MESSAGE_FOR_NO_MAILBOX_CONNECTED='No mailbox is connected right now run.\nRun /start to connect one';
+export const MESSAGE_FOR_NO_MAILBOX_CONNECTED='No mailbox is connected right now.\nRun /start to connect one';
 export const MESSAGE_FOR_UNLINK_CONFIRMATION=(email:string,scopes:string)=>
     `Mailbox ${email} has been unlinked.\nWatch stopped, access revoked (${scopes}).\nRun /start to connect a mailbox again`;
 export const MESSAGE_FOR_UNLINK_INCOMPLETE=(email:string,failedSteps:string)=>

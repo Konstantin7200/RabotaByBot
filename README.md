@@ -90,6 +90,10 @@ npm run lint
 npm run typecheck
 ```
 
+> **`npm start` runs `dist/`, not `src/`.** The directory is gitignored and
+> can go stale — always `npm run build` after pulling, or you will run an
+> older compiled implementation.
+
 ## Deploy
 
 Works on any always-on host with public HTTPS (Railway, Fly.io, …). A host
@@ -111,6 +115,7 @@ with a sleeping free tier violates the latency requirement — do not use one.
 | US-9 / US-10 transient failures | Narrowed scope (agreed): quick transient Gmail errors do not message the user; a notice is sent only after 3 consecutive failures (once), and a "working again" message only goes to owners who were notified. Hard access loss still messages immediately (FR-12). |
 | Journal retention | Sent rows older than 30 days are deleted by the daily `retention_cleanup` job (04:00); pending/failed rows are kept until they reach a terminal state. |
 | Google consent screen mode | `GOOGLE_CONSENT_MODE=testing` (default): refresh tokens expire in 7 days; `/status` shows the computed expiry and a once-per-grant advance warning is sent 24 h before it (US-8). Set `production` to drop the fixed-expiry messaging. |
+| OAuth callback with an unknown / expired / superseded `state` | Browser-only error page; no Telegram message. The `chatId` lives in the state row, which is consumed on read and purged by any later `/start` (or overwritten by a second `/start` for the same chat), so a notice would be unreliable — agreed limitation of US-1 CA3. Cancel/failure *with* a valid `state` still notifies Telegram as required. |
 
 ## Manual acceptance checklist (release gate)
 

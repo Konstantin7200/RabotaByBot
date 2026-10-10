@@ -70,4 +70,22 @@ describe("deliverNotification", () => {
         await deliverNotification(row);
         expect(vi.mocked(sendMessage).mock.calls.map((c) => c[0])).toEqual([1, 2]);
     });
+
+    it("logs a structured success event for observability", async () => {
+        const log = vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.mocked(getChatIdByMailboxId).mockResolvedValue("123");
+        vi.mocked(sendMessage).mockResolvedValue({} as never);
+        try {
+            await deliverNotification(row);
+            expect(log).toHaveBeenCalledWith(expect.objectContaining({
+                event: "notification_sent",
+                id: 7,
+                mailboxId: 3,
+                gmailMessageId: "m1",
+                chatId: "123",
+            }));
+        } finally {
+            log.mockRestore();
+        }
+    });
 });
