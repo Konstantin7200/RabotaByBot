@@ -39,7 +39,6 @@
     "email-addresses": "^5.0.0",
     "express": "^5.2.1",
     "google-auth-library": "^11.1.0",
-    "googleapis": "^182.0.0",
     "grammy": "^1.46.0",
     "html-to-text": "^10.0.1",
     "jose": "^5.10.0",
