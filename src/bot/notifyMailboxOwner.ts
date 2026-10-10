@@ -1,12 +1,16 @@
 import { getChatIdByMailboxId } from "../db/userRepository";
-import { sendMessage } from "./sendMessage";
+import { sendWithRetry, SendRetryOptions } from "./sendWithRetry";
 
-export async function notifyMailboxOwner(mailboxId: number, text: string): Promise<boolean> {
+export async function notifyMailboxOwner(
+    mailboxId: number,
+    text: string,
+    opts?: SendRetryOptions,
+): Promise<boolean> {
     try {
         const chatId = await getChatIdByMailboxId(mailboxId);
         if (chatId === null)
             return false;
-        await sendMessage(parseInt(chatId, 10), text);
+        await sendWithRetry(parseInt(chatId, 10), text, opts);
         return true;
     }
     catch (err) {

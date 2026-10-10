@@ -58,12 +58,24 @@ describe("announceRestart", () => {
         expect(touchHeartbeat).toHaveBeenCalledWith(now);
     });
 
-    it("keeps going when a chat send fails (best-effort)", async () => {
+    it("keeps going when a chat send fails (best-effort, no retry for blocked chats)", async () => {
         vi.mocked(getHeartbeat).mockResolvedValue(null);
         vi.mocked(listActive).mockResolvedValue(active as never);
-        vi.mocked(sendMessage).mockRejectedValue(new Error("blocked"));
+        vi.mocked(sendMessage).mockRejectedValue(
+            Object.assign(new Error("Forbidden"), { error_code: 403 }));
         await expect(announceRestart(now)).resolves.toBe(true);
         expect(sendMessage).toHaveBeenCalledTimes(2);
+        expect(touchHeartbeat).toHaveBeenCalledWith(now);
+    });
+
+    it("retries a transient send failure before moving on (US-10)", async () => {
+        vi.mocked(getHeartbeat).mockResolvedValue(null);
+        vi.mocked(listActive).mockResolvedValue(active as never);
+        vi.mocked(sendMessage).mockRejectedValueOnce(new Error("network"));
+        const sleep = vi.fn().mockResolvedValue(undefined as never);
+        await expect(announceRestart(now, { sleep })).resolves.toBe(true);
+        expect(sendMessage).toHaveBeenCalledTimes(3);
+        expect(sleep).toHaveBeenCalledTimes(1);
         expect(touchHeartbeat).toHaveBeenCalledWith(now);
     });
 });
