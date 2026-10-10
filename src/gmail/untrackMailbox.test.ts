@@ -40,10 +40,17 @@ describe("untrackMailbox (FR-9)", () => {
         expect(unlinkMailbox).toHaveBeenCalledWith(3);
     });
 
-    it("treats a mailbox without a token as fully untracked", async () => {
+    it("unlinks the mailbox locally even when the token is unreadable", async () => {
         await expect(untrackMailbox({ id: 7, email: "a@b.c", refreshToken: null, userId: 3 } as never))
-            .resolves.toEqual({ stopped: true, revoked: true });
+            .resolves.toEqual({ stopped: false, revoked: false });
         expect(stopWatching).not.toHaveBeenCalled();
         expect(revokeToken).not.toHaveBeenCalled();
+        expect(unlinkMailbox).toHaveBeenCalledWith(3);
+    });
+
+    it("still unlinks the mailbox locally when userId is missing", async () => {
+        await expect(untrackMailbox({ id: 7, email: "a@b.c", refreshToken: null, userId: null } as never))
+            .resolves.toEqual({ stopped: false, revoked: false });
+        expect(unlinkMailbox).not.toHaveBeenCalled();
     });
 });
