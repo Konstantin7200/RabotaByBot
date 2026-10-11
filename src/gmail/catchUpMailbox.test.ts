@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/notificationRepository", () => ({ addNotifications: vi.fn(), listByMessageIds: vi.fn() }));
+vi.mock("../db/notificationRepository", () => ({
+    addNotifications: vi.fn(),
+    listByMessageIds: vi.fn(),
+    markStaleAsSentForMailbox: vi.fn(async () => 0),
+}));
 vi.mock("../db/mailboxRepository", () => ({
     advanceBasis: vi.fn(),
     setAccessFailure: vi.fn(),

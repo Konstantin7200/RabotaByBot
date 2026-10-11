@@ -3,7 +3,7 @@ import { isNotificationMessageBody } from "./validateNotificationBody";
 import { UnvalidatedNotificationBody, validateNotificationPayload } from "./validateNotificationPayload";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
-import { addNotifications, AddNotificationType, listByMessageIds, listDeliverableByMailbox } from "../db/notificationRepository";
+import { addNotifications, AddNotificationType, listByMessageIds, listDeliverableByMailbox, markStaleAsSentForMailbox } from "../db/notificationRepository";
 import { advanceBasis, getMailbox, setAccessFailure } from "../db/mailboxRepository";
 import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
 import { getUserGmailClient } from "./getUserGmailClient";
@@ -74,6 +74,13 @@ export async function notificationHandler(req: Request, res: Response) {
             const rows=await listByMessageIds(mailbox.id,messageData.map((m)=>m.gmailMessageId));
             await advanceBasis(mailbox.id,newHistoryId);
             await reportPipelineSuccess(mailbox.id, mailbox.email);
+            // FR-7: rows older than the stale window are treated as delivered
+            // before the ack decision, so the push is never acked while a
+            // non-terminal row exists - and a stale row can no longer stall
+            // the batch below (it is excluded from claimDueRetries).
+            const swept=await markStaleAsSentForMailbox(mailbox.id);
+            if(swept>0)
+                console.log({event:"stale_sweep_inline",email:mailbox.email,count:swept});
             // A redelivery after budget_exceeded scans from the already-advanced
             // basis and finds nothing, while the rows inserted by the earlier
             // attempt may still be pending - fall back to every deliverable row

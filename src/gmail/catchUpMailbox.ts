@@ -1,5 +1,5 @@
 import { gmail_v1 } from "@googleapis/gmail";
-import { AddNotificationType, addNotifications, listByMessageIds } from "../db/notificationRepository";
+import { AddNotificationType, addNotifications, listByMessageIds, markStaleAsSentForMailbox } from "../db/notificationRepository";
 import { advanceBasis, setAccessFailure } from "../db/mailboxRepository";
 import { MailboxesTable } from "../db/entityTypes";
 import { getDataFromMessages } from "./getMessages";
@@ -47,6 +47,12 @@ async function ingestAndDeliver(
     }
     await advanceBasis(mailbox.id, newHistoryId);
     await reportPipelineSuccess(mailbox.id, mailbox.email);
+    // Same FR-7 pre-ack sweep as the push handler: a stale row must reach a
+    // terminal state before this pass reports progress, and must not stall
+    // the delivery batch below (it is excluded from claimDueRetries).
+    const swept = await markStaleAsSentForMailbox(mailbox.id);
+    if (swept > 0)
+        console.log({ event: "stale_sweep_inline", email: mailbox.email, count: swept });
     let delivered = 0;
     if (rows.length > 0) {
         await deliverBatchUntilTerminal(rows.map((r) => r.id));

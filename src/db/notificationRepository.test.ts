@@ -50,7 +50,7 @@ vi.mock("./index", () => {
     };
 });
 
-import { claimDueRetries, getRecentProblems, listDeliverableByMailbox, markStaleAsSent, replayFailed } from "./notificationRepository";
+import { claimDueRetries, getRecentProblems, listDeliverableByMailbox, markStaleAsSent, markStaleAsSentForMailbox, replayFailed } from "./notificationRepository";
 
 const dialect = new PgDialect();
 
@@ -73,6 +73,16 @@ describe("FR-7/FR-11 staleness window (replay-aware)", () => {
         expect(sqlText).toContain("coalesce");
         expect(sqlText).toContain("replayedAt");
         expect(sqlText).toContain("createdAt");
+        expect(captured.set).toMatchObject({ status: "sent", sentAt: now });
+    });
+
+    it("markStaleAsSentForMailbox scopes the same rule to one mailbox (M4)", async () => {
+        const now = new Date("2026-01-01T00:10:00Z");
+        await markStaleAsSentForMailbox(7, now);
+        const sqlText = whereSql();
+        expect(sqlText).toContain('"mailboxId" = ');
+        expect(sqlText).toContain("coalesce");
+        expect(sqlText).toContain('"status" = ');
         expect(captured.set).toMatchObject({ status: "sent", sentAt: now });
     });
 

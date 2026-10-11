@@ -4,6 +4,7 @@ vi.mock("../db/notificationRepository", () => ({
     addNotifications: vi.fn(),
     listByMessageIds: vi.fn(),
     listDeliverableByMailbox: vi.fn(),
+    markStaleAsSentForMailbox: vi.fn(async () => 0),
 }));
 vi.mock("../db/mailboxRepository", () => ({
     getMailbox: vi.fn(),
@@ -21,7 +22,7 @@ vi.mock("./getUserGmailClient", () => ({ getUserGmailClient: vi.fn() }));
 vi.mock("../bot/notifyMailboxOwner", () => ({ notifyMailboxOwner: vi.fn() }));
 
 import { notificationHandler } from "./notificationHandler";
-import { addNotifications, listByMessageIds, listDeliverableByMailbox } from "../db/notificationRepository";
+import { addNotifications, listByMessageIds, listDeliverableByMailbox, markStaleAsSentForMailbox } from "../db/notificationRepository";
 import { advanceBasis, claimFailureNotice, getMailbox, registerPipelineSuccess, registerTransientFailure, setAccessFailure } from "../db/mailboxRepository";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
@@ -126,6 +127,20 @@ describe("notificationHandler", () => {
         expect(listByMessageIds).toHaveBeenCalledWith(7, []);
         expect(advanceBasis).toHaveBeenCalledWith(7, "101");
         expect(deliverBatchUntilTerminal).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it("sweeps stale rows for the mailbox after advancing the basis, before the ack decision (M4/FR-7)", async () => {
+        vi.mocked(getDataFromMessages).mockResolvedValue([]);
+        vi.mocked(listByMessageIds).mockResolvedValue([] as never);
+        vi.mocked(markStaleAsSentForMailbox).mockResolvedValue(3 as never);
+
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+
+        expect(markStaleAsSentForMailbox).toHaveBeenCalledWith(7);
+        expect(vi.mocked(advanceBasis).mock.invocationCallOrder[0])
+            .toBeLessThan(vi.mocked(markStaleAsSentForMailbox).mock.invocationCallOrder[0]);
         expect(res.status).toHaveBeenCalledWith(200);
     });
 
