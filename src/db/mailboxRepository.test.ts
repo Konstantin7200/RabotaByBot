@@ -77,7 +77,7 @@ vi.mock("./index", () => {
     };
 });
 
-import { advanceBasis, claimFailureNotice, createMailbox, getMailbox, listDueForRenewal, listDueForTokenExpiryWarning, registerPipelineSuccess, registerTransientFailure } from "./mailboxRepository";
+import { advanceBasis, claimFailureNotice, consumeFailureNotice, createMailbox, getMailbox, listDueForRenewal, listDueForTokenExpiryWarning, registerPipelineSuccess, registerTransientFailure, wasFailureNotified } from "./mailboxRepository";
 import { encryptSecret } from "./secretBox";
 import { PgDialect } from "drizzle-orm/pg-core";
 
@@ -185,19 +185,33 @@ describe("persistent failure tracking (US-9/US-10)", () => {
         await expect(claimFailureNotice(7)).resolves.toBe(false);
     });
 
-    it("registerPipelineSuccess claims the restore right atomically", async () => {
-        captured.updateRows = [{ value: 7 }];
+    it("registerPipelineSuccess reports a restore as owed without consuming the claim (M5)", async () => {
+        captured.selectedRow = { value: new Date("2026-01-01") };
         await expect(registerPipelineSuccess(7)).resolves.toBe(true);
-        expect(captured.updated).toBe(true);
 
-        captured.updateRows = [];
+        captured.selectedRow = null;
         await expect(registerPipelineSuccess(7)).resolves.toBe(false);
     });
 
     it("registerPipelineSuccess always resets the failure counter", async () => {
-        captured.updateRows = [];
+        captured.selectedRow = null;
         await registerPipelineSuccess(7);
         expect(captured.updated).toBe(true);
         expect(updateWhereSql()).toContain("consecutiveTransientFailures");
+    });
+
+    it("consumeFailureNotice clears only a set claim", async () => {
+        captured.updateRows = [];
+        await consumeFailureNotice(7);
+        expect(captured.updated).toBe(true);
+        expect(updateWhereSql()).toContain("failureNotifiedAt");
+    });
+
+    it("wasFailureNotified reflects the stored claim", async () => {
+        captured.selectedRow = { value: new Date("2026-01-01") };
+        await expect(wasFailureNotified(7)).resolves.toBe(true);
+
+        captured.selectedRow = null;
+        await expect(wasFailureNotified(7)).resolves.toBe(false);
     });
 });

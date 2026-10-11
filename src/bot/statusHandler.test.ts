@@ -59,6 +59,22 @@ describe("createStatusMessage (FR-1, US-2)", () => {
         expect(msg).toContain("watch) has expired");
     });
 
+    it("warns when the watch was never started on an active mailbox (M3 root state)", () => {
+        const msg = base({ watchExpiration: null });
+        expect(msg).toContain("watch) was never started");
+        expect(msg).toContain("/start");
+    });
+
+    it("prints 'Not started' without a dangling UTC suffix", () => {
+        const msg = base({ watchExpiration: null });
+        expect(msg).toContain("Watch expiration:Not started\n");
+        expect(msg).not.toContain("Not started UTC");
+    });
+
+    it("keeps the UTC suffix for a started watch", () => {
+        expect(base()).toContain(`Watch expiration:${watch.toUTCString()} UTC`);
+    });
+
     it("shows no fixed expiry in production mode", () => {
         const msg = base({ tokenExpiresAt: null, consentMode: "production" });
         expect(msg).toContain("No fixed expiry (production mode)");

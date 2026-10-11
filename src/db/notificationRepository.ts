@@ -93,6 +93,20 @@ export async function markStaleAsSent(now: Date = new Date()) {
     return rows.length;
 }
 
+// M4 companion: same FR-7 rule scoped to one mailbox, run by the push handler
+// and the catch-up pass before they decide what to ack. Without it a stale
+// row is invisible to both the retry queries and the ack check (it is only
+// swept at boot), so the push would be acked while the row is undelivered and
+// the row would stall listByMessageIds-driven batches forever.
+export async function markStaleAsSentForMailbox(mailboxId: number, now: Date = new Date()) {
+    const rows = await db.update(notificationsTable).set({ status: 'sent', sentAt: now }).where(and(
+        eq(notificationsTable.mailboxId, mailboxId),
+        eq(notificationsTable.status, 'pending'),
+        sql`${pendingAgeExpr()} < ${staleCutoff(now)}`,
+    )).returning();
+    return rows.length;
+}
+
 export async function claimDueRetries(now: Date = new Date()) {
     return db.select().from(notificationsTable).where(and(
         eq(notificationsTable.status, 'pending'),

@@ -1,15 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { classifyAccessError, isHistoryUnavailable } from "./classifyAccessError";
 
-function gaxiosError(props: { code?: number | string; responseStatus?: number; message?: string }) {
+function gaxiosError(props: {
+    code?: number | string;
+    responseStatus?: number;
+    message?: string;
+    reason?: string;
+}) {
     const err = new Error(props.message ?? "boom") as Error & {
         code?: number | string;
-        response?: { status?: number };
+        response?: { status?: number; data?: { error?: { errors?: Array<{ reason?: string }> } } };
     };
     if (props.code !== undefined)
         err.code = props.code;
-    if (props.responseStatus !== undefined)
+    if (props.responseStatus !== undefined || props.reason !== undefined) {
         err.response = { status: props.responseStatus };
+        if (props.reason !== undefined)
+            err.response.data = { error: { errors: [{ reason: props.reason }] } };
+    }
     return err;
 }
 
@@ -46,8 +54,19 @@ describe("classifyAccessError", () => {
         expect(classifyAccessError(gaxiosError({ code: 403 }))).toBe("error");
     });
 
-    it("classifies 404 as error", () => {
-        expect(classifyAccessError(gaxiosError({ code: 404 }))).toBe("error");
+    it("classifies 403 with a non-quota reason as error", () => {
+        expect(classifyAccessError(gaxiosError({ code: 403, reason: "forbidden" }))).toBe("error");
+    });
+
+    it("classifies 403 rate-limit reasons as transient", () => {
+        expect(classifyAccessError(gaxiosError({ code: 403, reason: "rateLimitExceeded" }))).toBe("transient");
+        expect(classifyAccessError(gaxiosError({ code: 403, reason: "userRateLimitExceeded" }))).toBe("transient");
+        expect(classifyAccessError(gaxiosError({ code: 403, reason: "quotaExceeded" }))).toBe("transient");
+    });
+
+    it("classifies 404 as transient, not access loss", () => {
+        expect(classifyAccessError(gaxiosError({ code: 404 }))).toBe("transient");
+        expect(classifyAccessError(gaxiosError({ responseStatus: 404 }))).toBe("transient");
     });
 
     it("classifies unknown failures as transient", () => {

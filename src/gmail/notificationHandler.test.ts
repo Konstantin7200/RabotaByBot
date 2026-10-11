@@ -4,26 +4,31 @@ vi.mock("../db/notificationRepository", () => ({
     addNotifications: vi.fn(),
     listByMessageIds: vi.fn(),
     listDeliverableByMailbox: vi.fn(),
+    markStaleAsSentForMailbox: vi.fn(async () => 0),
 }));
 vi.mock("../db/mailboxRepository", () => ({
     getMailbox: vi.fn(),
     advanceBasis: vi.fn(),
     setAccessFailure: vi.fn(),
     registerTransientFailure: vi.fn(),
+    wasFailureNotified: vi.fn(),
     claimFailureNotice: vi.fn(),
     registerPipelineSuccess: vi.fn(),
+    consumeFailureNotice: vi.fn(),
 }));
 vi.mock("./getMessages", () => ({ getDataFromMessages: vi.fn() }));
 vi.mock("./getMessageIds", () => ({ getMessageIds: vi.fn() }));
+vi.mock("./catchUpMailbox", () => ({ catchUpMailbox: vi.fn() }));
 vi.mock("../bot/deliverBatch", () => ({ deliverBatchUntilTerminal: vi.fn() }));
 vi.mock("./getUserGmailClient", () => ({ getUserGmailClient: vi.fn() }));
 vi.mock("../bot/notifyMailboxOwner", () => ({ notifyMailboxOwner: vi.fn() }));
 
 import { notificationHandler } from "./notificationHandler";
-import { addNotifications, listByMessageIds, listDeliverableByMailbox } from "../db/notificationRepository";
-import { advanceBasis, claimFailureNotice, getMailbox, registerPipelineSuccess, registerTransientFailure, setAccessFailure } from "../db/mailboxRepository";
+import { addNotifications, listByMessageIds, listDeliverableByMailbox, markStaleAsSentForMailbox } from "../db/notificationRepository";
+import { advanceBasis, claimFailureNotice, consumeFailureNotice, getMailbox, registerPipelineSuccess, registerTransientFailure, setAccessFailure, wasFailureNotified } from "../db/mailboxRepository";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
+import { catchUpMailbox } from "./catchUpMailbox";
 import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
 import { getUserGmailClient } from "./getUserGmailClient";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
@@ -64,8 +69,11 @@ beforeEach(() => {
     vi.mocked(listDeliverableByMailbox).mockResolvedValue([] as never);
     vi.mocked(advanceBasis).mockResolvedValue(true);
     vi.mocked(registerTransientFailure).mockResolvedValue(1);
+    vi.mocked(wasFailureNotified).mockResolvedValue(false);
     vi.mocked(claimFailureNotice).mockResolvedValue(true);
     vi.mocked(registerPipelineSuccess).mockResolvedValue(false);
+    vi.mocked(consumeFailureNotice).mockResolvedValue(undefined);
+    vi.mocked(notifyMailboxOwner).mockResolvedValue(true as never);
     vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("terminal");
 });
 
@@ -127,11 +135,26 @@ describe("notificationHandler", () => {
         expect(res.status).toHaveBeenCalledWith(200);
     });
 
+    it("sweeps stale rows for the mailbox after advancing the basis, before the ack decision (M4/FR-7)", async () => {
+        vi.mocked(getDataFromMessages).mockResolvedValue([]);
+        vi.mocked(listByMessageIds).mockResolvedValue([] as never);
+        vi.mocked(markStaleAsSentForMailbox).mockResolvedValue(3 as never);
+
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+
+        expect(markStaleAsSentForMailbox).toHaveBeenCalledWith(7);
+        expect(vi.mocked(advanceBasis).mock.invocationCallOrder[0])
+            .toBeLessThan(vi.mocked(markStaleAsSentForMailbox).mock.invocationCallOrder[0]);
+        expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     it("does not ack an empty scan while rows from an earlier attempt are still pending (redelivery after budget_exceeded)", async () => {
         vi.mocked(getMessageIds).mockResolvedValue({ messageIds: [], newHistoryId: "101" });
         vi.mocked(listByMessageIds).mockResolvedValue([] as never);
         vi.mocked(listDeliverableByMailbox).mockResolvedValue([{ id: 11 }, { id: 12 }] as never);
-        vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("terminal");
+    vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("terminal");
+    vi.mocked(catchUpMailbox).mockResolvedValue({ outcome: "ok", source: "messages_fallback", scanned: 1, inserted: 1, delivered: 1 });
 
         const res = makeResponse();
         await notificationHandler(makeRequest(), res as never);
@@ -241,6 +264,37 @@ describe("notificationHandler", () => {
         expect(setAccessFailure).toHaveBeenCalledWith("a@b.c", "error");
         expect(notifyMailboxOwner).toHaveBeenCalledWith(7, MESSAGE_MAIL_PROCESSING_ERROR("a@b.c"));
         expect(advanceBasis).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(500);
+    });
+
+    it("delegates a 404 scan to the catch-up fallback and acks when it succeeds", async () => {
+        const notFound = Object.assign(new Error("stale history id"), { response: { status: 404 } });
+        vi.mocked(getMailbox).mockResolvedValue({ ...mailbox, historyIdBasis: "90" } as never);
+        vi.mocked(getMessageIds).mockRejectedValue(notFound);
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+        expect(catchUpMailbox).toHaveBeenCalled();
+        expect(setAccessFailure).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it("nacks when the delegated catch-up fallback also fails", async () => {
+        const notFound = Object.assign(new Error("stale history id"), { response: { status: 404 } });
+        vi.mocked(getMailbox).mockResolvedValue({ ...mailbox, historyIdBasis: "90" } as never);
+        vi.mocked(getMessageIds).mockRejectedValue(notFound);
+        vi.mocked(catchUpMailbox).mockRejectedValue(notFound);
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+        expect(res.status).toHaveBeenCalledWith(500);
+    });
+
+    it("does not delegate a 404 when no basis is stored", async () => {
+        const notFound = Object.assign(new Error("stale history id"), { response: { status: 404 } });
+        vi.mocked(getMessageIds).mockRejectedValue(notFound);
+        const res = makeResponse();
+        await notificationHandler(makeRequest(), res as never);
+        expect(catchUpMailbox).not.toHaveBeenCalled();
+        expect(registerTransientFailure).toHaveBeenCalledWith(7);
         expect(res.status).toHaveBeenCalledWith(500);
     });
 });

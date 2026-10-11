@@ -67,9 +67,18 @@ export function createStatusMessage(input:{
     const delivery=input.problems.stuckCount>0||input.problems.lastFailure!==null
         ? `\n${createDeliveryProblemsWarning(input.problems.stuckCount,input.problems.lastFailure?.lastError??null,input.problems.lastFailure?.attempts??0)}`
         : '';
+    const watchNeverStarted=input.accessStatus==='active'&&input.watchExpiration===null;
+    const watchWarning=input.watchExpiration!==null&&input.watchExpiration.getTime()<=now.getTime()
+        ? `\nWarning: tracking (watch) has expired; new-mail updates may be missing.\nIt is renewed automatically, or run /start to re-link`
+        : watchNeverStarted
+            ? '\nWarning: tracking (watch) was never started; new-mail pushes may not arrive.\nRun /start to re-link the mailbox'
+            : '';
+    const freshness=input.lastDeliveredAt===null
+        ? '\nLast notification: none delivered yet'
+        : `\nLast notification: ${input.lastDeliveredAt.toUTCString()}`;
     const watchExpiration=input.watchExpiration===null
         ? 'Not started'
-        : input.watchExpiration.toUTCString();
+        : `${input.watchExpiration.toUTCString()} UTC`;
     let tokenLine:string;
     let loginWarning='';
     if(input.tokenExpiresAt===null){
@@ -83,11 +92,5 @@ export function createStatusMessage(input:{
         else if(input.tokenExpiresAt.getTime()-now.getTime()<LOGIN_EXPIRY_WARNING_MS)
             loginWarning=`\nWarning: login expires soon (${input.tokenExpiresAt.toUTCString()}).\nRun /start to renew it`;
     }
-    const watchWarning=input.watchExpiration!==null&&input.watchExpiration.getTime()<=now.getTime()
-        ? `\nWarning: tracking (watch) has expired; new-mail updates may be missing.\nIt is renewed automatically, or run /start to re-link`
-        : '';
-    const freshness=input.lastDeliveredAt===null
-        ? '\nLast notification: none delivered yet'
-        : `\nLast notification: ${input.lastDeliveredAt.toUTCString()}`;
-    return `Email:${input.email}\nWatch expiration:${watchExpiration} UTC\nToken Expiration:${tokenLine}${input.tokenExpiresAt===null?'':' UTC'}${warning}${unreadable}${loginWarning}${watchWarning}${blocked}${delivery}${freshness}`;
+    return `Email:${input.email}\nWatch expiration:${watchExpiration}\nToken Expiration:${tokenLine}${input.tokenExpiresAt===null?'':' UTC'}${warning}${unreadable}${loginWarning}${watchWarning}${blocked}${delivery}${freshness}`;
 }

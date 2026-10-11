@@ -1,5 +1,5 @@
 import { gmail_v1 } from "@googleapis/gmail";
-import { AddNotificationType, addNotifications, listByMessageIds } from "../db/notificationRepository";
+import { AddNotificationType, addNotifications, listByMessageIds, markStaleAsSentForMailbox } from "../db/notificationRepository";
 import { advanceBasis, setAccessFailure } from "../db/mailboxRepository";
 import { MailboxesTable } from "../db/entityTypes";
 import { getDataFromMessages } from "./getMessages";
@@ -11,7 +11,7 @@ import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
 import { reportPipelineSuccess, reportTransientFailure } from "../bot/failureNotice";
 import { reportUnreadableToken } from "./reportUnreadableToken";
 import { classifyAccessError, isHistoryUnavailable } from "./classifyAccessError";
-import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR } from "../constants";
+import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR, RETENTION_DAYS } from "../constants";
 
 export type CatchUpSkipReason = "not_active" | "no_token" | "no_basis";
 export type CatchUpResult =
@@ -47,6 +47,12 @@ async function ingestAndDeliver(
     }
     await advanceBasis(mailbox.id, newHistoryId);
     await reportPipelineSuccess(mailbox.id, mailbox.email);
+    // Same FR-7 pre-ack sweep as the push handler: a stale row must reach a
+    // terminal state before this pass reports progress, and must not stall
+    // the delivery batch below (it is excluded from claimDueRetries).
+    const swept = await markStaleAsSentForMailbox(mailbox.id);
+    if (swept > 0)
+        console.log({ event: "stale_sweep_inline", email: mailbox.email, count: swept });
     let delivered = 0;
     if (rows.length > 0) {
         await deliverBatchUntilTerminal(rows.map((r) => r.id));
@@ -59,7 +65,12 @@ async function runFallbackPass(gmail: gmail_v1.Gmail, mailbox: MailboxesTable): 
     // FR-14: never earlier than the current basis; if nothing was delivered
     // yet, fall back to the time access was granted.
     const since = mailbox.historyIdBasisAt ?? mailbox.lastDeliveredAt ?? mailbox.tokenGrantedAt ?? new Date(0);
-    const afterUnixSeconds = Math.max(0, Math.floor(since.getTime() / 1000) - 1);
+    // M2: a message older than the retention window has no dedup key left
+    // (cleanup already deleted it), so re-listing it would re-insert a
+    // duplicate row - never scan earlier than now - RETENTION_DAYS.
+    const retentionFloor = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const boundedSince = since > retentionFloor ? since : retentionFloor;
+    const afterUnixSeconds = Math.max(0, Math.floor(boundedSince.getTime() / 1000) - 1);
     const ids = await listMessageIdsSince(gmail, mailbox.email, afterUnixSeconds);
     const profile = await gmail.users.getProfile({ userId: mailbox.email });
     const historyId = profile.data.historyId;

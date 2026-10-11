@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db/notificationRepository", () => ({ addNotifications: vi.fn(), listByMessageIds: vi.fn() }));
+vi.mock("../db/notificationRepository", () => ({
+    addNotifications: vi.fn(),
+    listByMessageIds: vi.fn(),
+    markStaleAsSentForMailbox: vi.fn(async () => 0),
+}));
 vi.mock("../db/mailboxRepository", () => ({
     advanceBasis: vi.fn(),
     setAccessFailure: vi.fn(),
     registerTransientFailure: vi.fn(),
+    wasFailureNotified: vi.fn(),
     claimFailureNotice: vi.fn(),
     registerPipelineSuccess: vi.fn(),
+    consumeFailureNotice: vi.fn(),
 }));
 vi.mock("./getMessages", () => ({ getDataFromMessages: vi.fn() }));
 vi.mock("./getMessageIds", () => ({ getMessageIds: vi.fn() }));
@@ -17,14 +23,14 @@ vi.mock("../bot/notifyMailboxOwner", () => ({ notifyMailboxOwner: vi.fn() }));
 
 import { catchUpMailbox } from "./catchUpMailbox";
 import { addNotifications, listByMessageIds } from "../db/notificationRepository";
-import { advanceBasis, claimFailureNotice, registerPipelineSuccess, registerTransientFailure, setAccessFailure } from "../db/mailboxRepository";
+import { advanceBasis, claimFailureNotice, consumeFailureNotice, registerPipelineSuccess, registerTransientFailure, setAccessFailure, wasFailureNotified } from "../db/mailboxRepository";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
 import { listMessageIdsSince } from "./listMessageIdsSince";
 import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
 import { getUserGmailClient } from "./getUserGmailClient";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
-import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR, MESSAGE_PERSISTENT_FAILURE } from "../constants";
+import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR, MESSAGE_PERSISTENT_FAILURE, RETENTION_DAYS } from "../constants";
 import { MailboxesTable } from "../db/entityTypes";
 
 const BASIS_AT = new Date("2026-10-09T00:00:00.000Z");
@@ -50,9 +56,11 @@ beforeEach(() => {
     vi.mocked(advanceBasis).mockResolvedValue(true);
     vi.mocked(setAccessFailure).mockResolvedValue(undefined as never);
     vi.mocked(registerTransientFailure).mockResolvedValue(1);
+    vi.mocked(wasFailureNotified).mockResolvedValue(false);
     vi.mocked(claimFailureNotice).mockResolvedValue(true);
     vi.mocked(registerPipelineSuccess).mockResolvedValue(false);
-    vi.mocked(notifyMailboxOwner).mockResolvedValue(undefined as never);
+    vi.mocked(consumeFailureNotice).mockResolvedValue(undefined);
+    vi.mocked(notifyMailboxOwner).mockResolvedValue(true as never);
     vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("terminal");
     vi.mocked(listMessageIdsSince).mockResolvedValue(["m1"]);
     vi.mocked(gmail.users.getProfile).mockResolvedValue({ data: { historyId: "200" } });
@@ -165,12 +173,25 @@ describe("catchUpMailbox — messages.list fallback on stale history id", () => 
             .toHaveBeenCalledWith(gmail, "a@b.c", Math.floor(GRANTED_AT.getTime() / 1000) - 1);
     });
 
-    it("scans from epoch only when every timestamp is missing", async () => {
+    it("clamps every timestamp at the retention floor (M2) instead of scanning from epoch", async () => {
         vi.mocked(getMessageIds).mockRejectedValue(notFound);
         await catchUpMailbox({
             ...mailbox, historyIdBasisAt: null, lastDeliveredAt: null, tokenGrantedAt: null,
         } as never);
-        expect(listMessageIdsSince).toHaveBeenCalledWith(gmail, "a@b.c", 0);
+        const floor = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+        const arg = vi.mocked(listMessageIdsSince).mock.calls[0][2];
+        expect(arg).toBeGreaterThanOrEqual(Math.floor(floor / 1000) - 2);
+        expect(arg).toBeLessThanOrEqual(Math.floor(Date.now() / 1000) - RETENTION_DAYS * 24 * 60 * 60 + 60);
+    });
+
+    it("clamps a basis older than the retention window at the floor (M2)", async () => {
+        vi.mocked(getMessageIds).mockRejectedValue(notFound);
+        const ancient = new Date("2020-01-01T00:00:00.000Z");
+        await catchUpMailbox({ ...mailbox, historyIdBasisAt: ancient, lastDeliveredAt: null, tokenGrantedAt: null } as never);
+        const floor = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+        const arg = vi.mocked(listMessageIdsSince).mock.calls[0][2];
+        expect(arg).toBeGreaterThanOrEqual(Math.floor(floor / 1000) - 2);
+        expect(arg).not.toBe(Math.floor(ancient.getTime() / 1000) - 1);
     });
 
     it("does not advance the basis when getProfile fails after the fallback scan", async () => {
@@ -180,11 +201,12 @@ describe("catchUpMailbox — messages.list fallback on stale history id", () => 
         expect(advanceBasis).not.toHaveBeenCalled();
     });
 
-    it("treats a 404 from messages.get as an ordinary error, not a fallback trigger", async () => {
+    it("treats a 404 from messages.get as transient, not a fallback trigger or access loss", async () => {
         vi.mocked(getDataFromMessages).mockRejectedValue(notFound);
         await expect(catchUpMailbox(mailbox)).rejects.toThrow("not found");
         expect(listMessageIdsSince).not.toHaveBeenCalled();
-        expect(setAccessFailure).toHaveBeenCalledWith("a@b.c", "error");
+        expect(setAccessFailure).not.toHaveBeenCalled();
+        expect(registerTransientFailure).toHaveBeenCalledWith(7);
         expect(advanceBasis).not.toHaveBeenCalled();
     });
 });

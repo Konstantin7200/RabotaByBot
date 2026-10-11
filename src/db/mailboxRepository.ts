@@ -14,31 +14,42 @@ function decryptRow<T extends { refreshToken: string | null }>(row: T): T {
 }
 
 type CreatedMailbox=Omit<InsertedMailbox,'linkedAt'|'tokenGrantedAt'|'accessStatus'|'historyIdBasis'|'watchExpiration'>
-export async function createMailbox(value:CreatedMailbox){
-    const valueForDb:InsertedMailbox={
+
+// Shared payloads so createMailbox/setWatchSuccess and the transactional
+// linkMailboxAtomically can never drift apart.
+function mailboxInsertValues(value:CreatedMailbox):InsertedMailbox{
+    return {
         ...value,
         refreshToken:encryptToken(value.refreshToken)??null,
         linkedAt:new Date(),
         tokenGrantedAt:new Date(),
         accessStatus:'active',
     }
-    await db.insert(mailboxesTable).values(valueForDb).onConflictDoUpdate({
-        target: mailboxesTable.email,
-        set: {
-            userId: valueForDb.userId,
-            refreshToken: valueForDb.refreshToken,
-            tokenGrantedAt: valueForDb.tokenGrantedAt,
-            accessStatus: 'active',
-            linkedAt: valueForDb.linkedAt,
-            tokenExpiryWarnedAt: null,
-            consecutiveTransientFailures: 0,
-            failureNotifiedAt: null,
-        },
-    });
 }
-export async function unlinkMailbox(userId:number) {
-    const updateValue:Partial<InsertedMailbox>={
-        accessStatus:'unlinked',
+function mailboxUpsertSet(valueForDb:InsertedMailbox){
+    return {
+        userId: valueForDb.userId,
+        refreshToken: valueForDb.refreshToken,
+        tokenGrantedAt: valueForDb.tokenGrantedAt,
+        accessStatus: 'active' as const,
+        linkedAt: valueForDb.linkedAt,
+        tokenExpiryWarnedAt: null,
+        consecutiveTransientFailures: 0,
+        failureNotifiedAt: null,
+    };
+}
+function watchSuccessSet(historyIdBasis:string,watchExpiration:Date){
+    return {
+        historyIdBasis:sql`COALESCE(${mailboxesTable.historyIdBasis}, ${historyIdBasis})`,
+        historyIdBasisAt: sql`COALESCE(${mailboxesTable.historyIdBasisAt}, CASE WHEN ${mailboxesTable.historyIdBasis} IS NULL THEN CURRENT_TIMESTAMP ELSE NULL END)`,
+        watchExpiration,
+        watchRenewedAt: new Date(),
+        accessStatus:'active' as const
+    }
+}
+function unlinkSet():Partial<InsertedMailbox>{
+    return {
+        accessStatus:'unlinked' as const,
         refreshToken:null,
         userId:null,
         watchExpiration:null,
@@ -50,7 +61,42 @@ export async function unlinkMailbox(userId:number) {
         historyIdBasis:null,
         historyIdBasisAt:null
     }
-    const rows=await db.update(mailboxesTable).set(updateValue).where(eq(mailboxesTable.userId,userId)).returning();
+}
+
+export async function createMailbox(value:CreatedMailbox){
+    const valueForDb=mailboxInsertValues(value);
+    await db.insert(mailboxesTable).values(valueForDb).onConflictDoUpdate({
+        target: mailboxesTable.email,
+        set: mailboxUpsertSet(valueForDb),
+    });
+}
+
+// FR-3/FR-15: persist a freshly linked mailbox atomically. The replaced
+// mailbox's DB unlink runs in the same transaction (before the insert, so
+// the unique userId slot is freed) - a failure can no longer leave the user
+// with an active row that has no watch, or with the old linkage destroyed
+// and no new one. Remote cleanup (users.stop, oauth2.revoke) and Telegram
+// notices are the caller's job, after the commit.
+export async function linkMailboxAtomically(
+    value:CreatedMailbox,
+    watch:{historyIdBasis:string,watchExpiration:Date},
+    replacedUserId:number|null,
+){
+    await db.transaction(async (tx)=>{
+        if(replacedUserId!==null)
+            await tx.update(mailboxesTable).set(unlinkSet()).where(eq(mailboxesTable.userId,replacedUserId));
+        const valueForDb=mailboxInsertValues(value);
+        await tx.insert(mailboxesTable).values(valueForDb).onConflictDoUpdate({
+            target: mailboxesTable.email,
+            set: mailboxUpsertSet(valueForDb),
+        });
+        await tx.update(mailboxesTable).set(watchSuccessSet(watch.historyIdBasis,watch.watchExpiration))
+            .where(eq(mailboxesTable.email,value.email));
+    });
+}
+
+export async function unlinkMailbox(userId:number) {
+    const rows=await db.update(mailboxesTable).set(unlinkSet()).where(eq(mailboxesTable.userId,userId)).returning();
     return rows.length>0?rows[0]:null;
 }
 
@@ -70,13 +116,8 @@ export async function getMailboxByChatId(chatId:string) {
 }
 
 export async function setWatchSuccess(email:string,historyIdBasis:string,watchExpiration:Date) {
-    await db.update(mailboxesTable).set({
-        historyIdBasis:sql`COALESCE(${mailboxesTable.historyIdBasis}, ${historyIdBasis})`,
-        historyIdBasisAt: sql`COALESCE(${mailboxesTable.historyIdBasisAt}, CASE WHEN ${mailboxesTable.historyIdBasis} IS NULL THEN CURRENT_TIMESTAMP ELSE NULL END)`,
-        watchExpiration,
-        watchRenewedAt: new Date(),
-        accessStatus:'active'
-    }).where(eq(mailboxesTable.email,email));
+    await db.update(mailboxesTable).set(watchSuccessSet(historyIdBasis,watchExpiration))
+        .where(eq(mailboxesTable.email,email));
 }
 
 type AccessFailureStatus=Exclude<typeof accessStatusEnum.enumValues[number],'active'|'unlinked'>
@@ -172,15 +213,30 @@ export async function claimFailureNotice(id:number):Promise<boolean> {
     return rows.length>0;
 }
 
-// US-10: atomically claim the right to send the "working again" message and
-// reset the failure streak. Concurrent successes can never both claim it.
+// US-9/US-10: read-only companion to claimFailureNotice - has the owner
+// already received the persistent-failure notice for this incident?
+export async function wasFailureNotified(id:number):Promise<boolean> {
+    const rows=await db.select({value:mailboxesTable.failureNotifiedAt}).from(mailboxesTable).where(eq(mailboxesTable.id,id));
+    return rows[0]?.value!==null&&rows[0]!==undefined;
+}
+
+// US-10: reset the failure streak (always, on any success) and report whether
+// a restore notice is owed. The failureNotifiedAt claim is NOT consumed here:
+// M5 moves the consume to after the restore notice was actually delivered,
+// so a Telegram outage cannot swallow the one-shot "working again" message.
 export async function registerPipelineSuccess(id:number):Promise<boolean> {
-    const claimed=await db.update(mailboxesTable)
-        .set({failureNotifiedAt:null})
-        .where(and(eq(mailboxesTable.id,id),isNotNull(mailboxesTable.failureNotifiedAt)))
-        .returning({value:mailboxesTable.id});
+    const rows=await db.select({value:mailboxesTable.failureNotifiedAt}).from(mailboxesTable).where(eq(mailboxesTable.id,id));
+    const owed=rows[0]?.value!==null&&rows[0]!==undefined;
     await db.update(mailboxesTable)
         .set({consecutiveTransientFailures:0})
         .where(and(eq(mailboxesTable.id,id),sql`${mailboxesTable.consecutiveTransientFailures} > 0`));
-    return claimed.length>0;
+    return owed;
+}
+
+// US-10: consume the failure-notice claim once the restore notice has been
+// delivered (M5, claim-after-send per warnTokenExpiry).
+export async function consumeFailureNotice(id:number):Promise<void> {
+    await db.update(mailboxesTable)
+        .set({failureNotifiedAt:null})
+        .where(and(eq(mailboxesTable.id,id),isNotNull(mailboxesTable.failureNotifiedAt)));
 }

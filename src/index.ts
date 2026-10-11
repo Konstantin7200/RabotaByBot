@@ -17,11 +17,13 @@ const server = app.listen(EnvConfig.port, async () => {
   } catch (err) {
     console.log({ event: "telegram_webhook_set_failed", err: String(err) });
   }
+  // M5: sweep and scheduler first - a flaky/unreachable Telegram API must
+  // never delay delivery; one announce attempt (attempts: 1), after the
+  // pipeline is already up.
+  await sweepStaleOnBoot();
+  startScheduler();
   let wasDown = false;
   try {
-    // Boot must not stall on Telegram retries: sweep and scheduler start right
-    // after, so a flaky/unreachable API would delay delivery. One attempt here;
-    // sendWithRetry's attempts remain for all other notice call sites.
     wasDown = await announceRestart(undefined, { attempts: 1 });
   } catch (err) {
     console.log({ event: "announce_restart_failed", err: String(err) });
@@ -29,8 +31,6 @@ const server = app.listen(EnvConfig.port, async () => {
   if (wasDown)
     void runCatchUpPass().catch((err) =>
       console.log({ event: "catch_up_startup_failed", err: String(err) }));
-  await sweepStaleOnBoot();
-  startScheduler();
 });
 
 async function shutdown(signal: string) {
