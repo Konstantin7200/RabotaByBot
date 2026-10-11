@@ -40,7 +40,7 @@ import { remoteUntrack } from "../gmail/untrackMailbox";
 import { sendMessage } from "../bot/sendMessage";
 import { getTokens } from "./getTokens";
 import { auth } from ".";
-import { MESSAGE_FOR_AUTH_FAILED } from "../constants";
+import { MESSAGE_FOR_AUTH_FAILED, MESSAGE_MAILBOX_RELINKED } from "../constants";
 
 const CHAT_ID = 42;
 const tokens = { idToken: "id-token", refreshToken: "refresh-token", accessToken: "access-token" };
@@ -165,6 +165,6 @@ describe("callback (FR-3, US-1)", () => {
         } as never);
         vi.mocked(getChatIdByUserId).mockResolvedValue("99" as never);
         await runSuccess();
-        expect(sendMessage).toHaveBeenCalledWith(99, expect.stringContaining("u@b.c"));
+        expect(sendMessage).toHaveBeenCalledWith(99, MESSAGE_MAILBOX_RELINKED("u@b.c"));
     });
 });
