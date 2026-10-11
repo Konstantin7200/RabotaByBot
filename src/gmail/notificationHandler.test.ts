@@ -214,7 +214,7 @@ describe("notificationHandler", () => {
         expect(res.status).toHaveBeenCalledWith(500);
     });
 
-    it("marks expired, notifies once, and holds the push on invalid_grant (FR-12 б)", async () => {
+    it("marks expired, notifies once, and holds the push on invalid_grant (FR-12 b)", async () => {
         vi.mocked(getMessageIds).mockRejectedValue(new Error("invalid_grant: Token has been expired or revoked."));
         const res = makeResponse();
         await notificationHandler(makeRequest(), res as never);
@@ -255,7 +255,7 @@ describe("notificationHandler", () => {
         expect(registerPipelineSuccess).toHaveBeenCalledWith(7);
     });
 
-    it("marks error and notifies on a hard Gmail API failure (FR-12 в)", async () => {
+    it("marks error and notifies on a hard Gmail API failure (FR-12 v)", async () => {
         const err = new Error("forbidden") as Error & { code: number };
         err.code = 403;
         vi.mocked(getDataFromMessages).mockRejectedValue(err);

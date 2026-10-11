@@ -86,6 +86,9 @@ documented inline there.
 
 ### 5. Run
 
+Use the Node version pinned in `.nvmrc` (`nvm use`); `package.json` requires
+Node 20+.
+
 ```bash
 npm run dev     # hot reload
 npm run build && npm start
