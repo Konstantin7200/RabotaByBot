@@ -1,3 +1,4 @@
+import { log } from "../../logger";
 import { replayFailed } from "../../db/notificationRepository";
 import { listActive } from "../../db/mailboxRepository";
 import { catchUpMailbox } from "../../gmail/catchUpMailbox";
@@ -18,11 +19,11 @@ async function doPass(): Promise<void> {
     for (const row of active) {
         try {
             const result = await catchUpMailbox(row.mailbox);
-            console.log({ event: "catch_up_mailbox", email: row.mailbox.email, ...result });
+            log.info({ event: "catch_up_mailbox", email: row.mailbox.email, ...result });
         } catch (err) {
             failed++;
-            console.log({ event: "catch_up_mailbox_failed", email: row.mailbox.email, err: String(err) });
+            log.error({ event: "catch_up_mailbox_failed", email: row.mailbox.email, err: String(err) });
         }
     }
-    console.log({ event: "catch_up_pass", replayed, mailboxes: active.length, failed });
+    log.info({ event: "catch_up_pass", replayed, mailboxes: active.length, failed });
 }

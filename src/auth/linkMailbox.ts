@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { auth } from ".";
 import { EnvConfig } from "../config";
 import { getTokens } from "./getTokens";
@@ -24,11 +25,11 @@ export type LinkedAccount = {
 async function cleanupReplacedMailbox(oldMailbox:MailboxesTable,newEmail:string,chatId:number){
     const result=await remoteUntrack(oldMailbox);
     if(!result.stopped||!result.revoked)
-        console.log({event:"replaced_unlink_incomplete",email:oldMailbox.email,stopped:result.stopped,revoked:result.revoked});
+        log.warn({event:"replaced_unlink_incomplete",email:oldMailbox.email,stopped:result.stopped,revoked:result.revoked});
     try{
         await sendMessage(chatId,createReplacedMailboxMessage(oldMailbox.email,newEmail));
     } catch(err){
-        console.log({event:"notify_replaced_mailbox_failed",err:String(err)});
+        log.error({event:"notify_replaced_mailbox_failed",err:String(err)});
     }
 }
 
@@ -36,7 +37,7 @@ async function notifyPreviousOwner(oldChatId:number,email:string){
     try{
         await sendMessage(oldChatId,MESSAGE_MAILBOX_RELINKED(email));
     } catch(err){
-        console.log({event:"notify_previous_owner_failed",err:String(err)});
+        log.error({event:"notify_previous_owner_failed",err:String(err)});
     }
 }
 
@@ -86,7 +87,7 @@ export async function linkMailbox(chatId:string,code:string):Promise<LinkedAccou
         await cleanupReplacedMailbox(oldMailbox,email,numericChatId);
     if(previousChatId!==null&&Number(previousChatId)!==numericChatId)
         await notifyPreviousOwner(Number(previousChatId),email);
-    console.log({event:"oauth_linked",email});
+    log.info({event:"oauth_linked",email});
     notifyChat(numericChatId,chooseLoginMessage(email,previousStatus));
     return {email,relinkedExisting:existing!==null&&existing.historyIdBasis!==null};
 }

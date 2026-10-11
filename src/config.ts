@@ -1,4 +1,5 @@
 import "dotenv/config";
+import type { LogLevel } from "./logger";
 
 type ConfigType={
     port:number,
@@ -8,6 +9,7 @@ type ConfigType={
     tokenEncryptionKey:string,
     rabotaSubjectPatterns:string[],
     googleConsentMode:'testing'|'production',
+    logLevel:LogLevel,
     googleAuth:{
         clientId:string,
         secret:string,
@@ -26,6 +28,7 @@ type UnvalidatedConfigType= {
     tokenEncryptionKey:unknown,
     rabotaSubjectPatterns:unknown,
     googleConsentMode:unknown,
+    logLevel:unknown,
     googleAuth:{
         clientId:unknown,
         secret:unknown,
@@ -46,6 +49,7 @@ function createConfig():ConfigType{
             ? process.env.RABOTA_SUBJECT_PATTERNS.split(',').map((item)=>item.trim()).filter((item)=>item!=='')
             : [],
         googleConsentMode:process.env.GOOGLE_CONSENT_MODE??'testing',
+        logLevel:process.env.LOG_LEVEL??'info',
         publicBaseUrl:typeof process.env.PUBLIC_BASE_URL==='string'
             ? process.env.PUBLIC_BASE_URL.replace(/\/+$/,'')
             : process.env.PUBLIC_BASE_URL,
@@ -88,6 +92,8 @@ function configProblems(config:UnvalidatedConfigType):string[]{
         problems.push('RABOTA_SUBJECT_PATTERNS');
     if(config.googleConsentMode!=='testing'&&config.googleConsentMode!=='production')
         problems.push('GOOGLE_CONSENT_MODE (testing|production)');
+    if(config.logLevel!=='debug'&&config.logLevel!=='info'&&config.logLevel!=='warn'&&config.logLevel!=='error')
+        problems.push('LOG_LEVEL (debug|info|warn|error)');
     if(typeof config.publicBaseUrl!=='string'||config.publicBaseUrl.trim()==="")
         problems.push('PUBLIC_BASE_URL');
     else{

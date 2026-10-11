@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { classifySendError } from "./classifySendError";
 import { renderNotification } from "./renderNotification";
 import { sendMessage } from "./sendMessage";
@@ -30,7 +31,7 @@ export async function deliverNotification(notification: Notification): Promise<v
     await setNotificationDelivered(notification.gmailMessageId, notification.mailboxId);
     await setLastDeliveredAt(notification.mailboxId, new Date());
     await setChatStatus(chatId, "ok");
-    console.log({
+    log.info({
         event: "notification_sent",
         id: notification.id,
         mailboxId: notification.mailboxId,

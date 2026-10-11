@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
 import { addNotifications, AddNotificationType, listByMessageIds, listDeliverableByMailbox, markStaleAsSentForMailbox } from "../db/notificationRepository";
@@ -63,7 +64,7 @@ export async function processNotification(decoded: NotificationBody): Promise<Pu
             // the batch below (it is excluded from claimDueRetries).
             const swept=await markStaleAsSentForMailbox(mailbox.id);
             if(swept>0)
-                console.log({event:"stale_sweep_inline",email:mailbox.email,count:swept});
+                log.info({event:"stale_sweep_inline",email:mailbox.email,count:swept});
             // A redelivery after budget_exceeded scans from the already-advanced
             // basis and finds nothing, while the rows inserted by the earlier
             // attempt may still be pending - fall back to every deliverable row
@@ -76,7 +77,7 @@ export async function processNotification(decoded: NotificationBody): Promise<Pu
             return outcome==='terminal'?"ack":"retry";
         }
         catch(err){
-            console.log({ event: "push_batch_failed", email: decoded.emailAddress, err: String(err) });
+            log.error({ event: "push_batch_failed", email: decoded.emailAddress, err: String(err) });
             return "fail";
         }
     } catch (err) {
@@ -85,7 +86,7 @@ export async function processNotification(decoded: NotificationBody): Promise<Pu
         // so recovery takes seconds instead of the next daily pass.
         if (isHistoryUnavailable(err) && loadedMailbox !== null
             && loadedMailbox.accessStatus === "active" && loadedMailbox.historyIdBasis !== null) {
-            console.log({ event: "push_falls_back_to_catch_up", email: decoded.emailAddress });
+            log.warn({ event: "push_falls_back_to_catch_up", email: decoded.emailAddress });
             try {
                 await catchUpMailbox(loadedMailbox);
                 return "ack";
@@ -94,7 +95,7 @@ export async function processNotification(decoded: NotificationBody): Promise<Pu
             }
         }
         const kind = classifyAccessError(err);
-        console.log({ event: "push_processing_failed", email: decoded.emailAddress, kind, err: String(err) });
+        log.error({ event: "push_processing_failed", email: decoded.emailAddress, kind, err: String(err) });
         if (kind === "transient" && loadedMailbox !== null && loadedMailbox.accessStatus === "active") {
             await reportTransientFailure(loadedMailbox.id, loadedMailbox.email);
         } else if (kind !== "transient" && loadedMailbox !== null && loadedMailbox.accessStatus === "active") {

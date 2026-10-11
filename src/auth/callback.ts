@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { Request,Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import { join } from "path";
@@ -45,9 +46,9 @@ export async function callback(req:Request,res:Response){
         if (linked.relinkedExisting)
             void getMailbox(linked.email)
                 .then((m) => (m === null ? undefined : catchUpMailbox(m)))
-                .catch((err) => console.log({ event: "catch_up_failed", email: linked.email, err: String(err) }));
+                .catch((err) => log.error({ event: "catch_up_failed", email: linked.email, err: String(err) }));
     } catch(err){
-        console.log({event:"oauth_callback_failed",chatId,err:String(err)});
+        log.error({event:"oauth_callback_failed",chatId,err:String(err)});
         notifyChat(chatId,MESSAGE_FOR_AUTH_FAILED);
         respondError(res,StatusCodes.INTERNAL_SERVER_ERROR);
     }

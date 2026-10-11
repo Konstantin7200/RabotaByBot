@@ -82,8 +82,16 @@ describe("EnvConfig", () => {
     });
 
     it("defaults googleConsentMode to testing and accepts production", async () => {
-        expect((await loadConfig({ GOOGLE_CONSENT_MODE: undefined })).googleConsentMode).toBe("testing");
-        expect((await loadConfig({ GOOGLE_CONSENT_MODE: "production" })).googleConsentMode).toBe("production");
         await expect(loadConfig({ GOOGLE_CONSENT_MODE: "weird" })).rejects.toThrow();
+        expect((await loadConfig({ GOOGLE_CONSENT_MODE: undefined })).googleConsentMode).toBe("testing");
+        // Leave a valid value behind: loadConfig mutates process.env for the
+        // next import, and later tests inherit it.
+        expect((await loadConfig({ GOOGLE_CONSENT_MODE: "production" })).googleConsentMode).toBe("production");
+    });
+
+    it("defaults logLevel to info and validates LOG_LEVEL", async () => {
+        expect((await loadConfig({ LOG_LEVEL: undefined })).logLevel).toBe("info");
+        expect((await loadConfig({ LOG_LEVEL: "debug" })).logLevel).toBe("debug");
+        await expect(loadConfig({ LOG_LEVEL: "verbose" })).rejects.toThrow(/LOG_LEVEL/);
     });
 });

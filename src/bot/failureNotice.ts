@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { claimFailureNotice, consumeFailureNotice, registerPipelineSuccess, registerTransientFailure, wasFailureNotified } from "../db/mailboxRepository";
 import { notifyMailboxOwner } from "./notifyMailboxOwner";
 import { MESSAGE_DELIVERY_RESTORED, MESSAGE_PERSISTENT_FAILURE, PERSISTENT_FAILURE_THRESHOLD } from "../constants";
@@ -14,7 +15,7 @@ export async function reportTransientFailure(mailboxId: number, email: string): 
         return;
     const sent = await notifyMailboxOwner(mailboxId, MESSAGE_PERSISTENT_FAILURE(email));
     if (!sent) {
-        console.log({ event: "persistent_failure_notice_not_sent", mailboxId });
+        log.warn({ event: "persistent_failure_notice_not_sent", mailboxId });
         return;
     }
     await claimFailureNotice(mailboxId);
@@ -30,7 +31,7 @@ export async function reportPipelineSuccess(mailboxId: number, email: string): P
         return;
     const sent = await notifyMailboxOwner(mailboxId, MESSAGE_DELIVERY_RESTORED(email));
     if (!sent) {
-        console.log({ event: "delivery_restored_notice_not_sent", mailboxId });
+        log.warn({ event: "delivery_restored_notice_not_sent", mailboxId });
         return;
     }
     await consumeFailureNotice(mailboxId);

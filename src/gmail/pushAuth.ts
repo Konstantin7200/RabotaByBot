@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { RequestHandler } from "express";
 import { StatusCodes } from "http-status-codes";
 import { JWTVerifyGetKey } from "jose";
@@ -11,7 +12,7 @@ export function createRequirePushAuth(getKey: JWTVerifyGetKey, audience: string)
     return async (req, res, next) => {
         const authorized = await verifyPushAuth(req.headers.authorization, audience, getKey);
         if (!authorized) {
-            console.log({ event: "push_auth_rejected", path: req.path });
+            log.warn({ event: "push_auth_rejected", path: req.path });
             res.status(StatusCodes.UNAUTHORIZED).json({ error: "Unauthorized" });
             return;
         }

@@ -1,3 +1,4 @@
+import { log } from "../../logger";
 import { claimDueRetries, markStaleAsSent, recordFailure } from "../../db/notificationRepository";
 import { deliverNotification } from "../../bot/deliverNotification";
 
@@ -30,15 +31,15 @@ export async function sweepStaleOnBoot(): Promise<void> {
     try {
         const stale = await markStaleAsSent();
         if (stale > 0)
-            console.log({ event: "stale_sweep_boot", stale });
+            log.info({ event: "stale_sweep_boot", stale });
     } catch (err) {
-        console.log({ event: "stale_sweep_boot_failed", err: String(err) });
+        log.error({ event: "stale_sweep_boot_failed", err: String(err) });
     }
 }
 
 async function doPass(): Promise<void> {
     if (Date.now() < cooldownUntil) {
-        console.log({ event: "delivery_pass_cooldown", remainingMs: cooldownUntil - Date.now() });
+        log.info({ event: "delivery_pass_cooldown", remainingMs: cooldownUntil - Date.now() });
         return;
     }
     let due: Awaited<ReturnType<typeof claimDueRetries>>;
@@ -53,19 +54,19 @@ async function doPass(): Promise<void> {
     consecutiveDbErrors = 0;
     if (due.length === 0)
         return;
-    console.log({ event: "delivery_pass", due: due.length });
+    log.info({ event: "delivery_pass", due: due.length });
     for (const row of due) {
         try {
             await deliverNotification(row);
         } catch (err) {
-            console.log({ event: "delivery_attempt_error", id: row.id, err: String(err) });
+            log.error({ event: "delivery_attempt_error", id: row.id, err: String(err) });
             // M7: deliverNotification records its own failures for send errors;
             // this defensive record covers unexpected throws (e.g. a DB error
             // after the Telegram send) so the row still ages out via attempts.
             try {
                 await recordFailure(row.id, String(err));
             } catch (recordErr) {
-                console.log({ event: "delivery_failure_record_error", id: row.id, err: String(recordErr) });
+                log.error({ event: "delivery_failure_record_error", id: row.id, err: String(recordErr) });
             }
         }
     }

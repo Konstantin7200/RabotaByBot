@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { EnvConfig } from "../config";
 
@@ -38,7 +39,7 @@ export function decryptTokenOrNull(stored: string | null): string | null {
     try {
         return decryptSecret(stored);
     } catch {
-        console.log({ event: "refresh_token_decrypt_failed" });
+        log.warn({ event: "refresh_token_decrypt_failed" });
         return null;
     }
 }
