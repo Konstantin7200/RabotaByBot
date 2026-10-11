@@ -6,10 +6,10 @@ import { getTokens } from "./getTokens";
 import { takeKey } from "../db/oauthKeysRepository";
 import { createIfNotExists, getByChatId, getChatIdByUserId } from "../db/userRepository";
 import { InsertedMailbox, InsertedUser, MailboxesTable } from "../db/entityTypes";
-import { createMailbox, getByUserId, getMailbox, setWatchSuccess } from "../db/mailboxRepository";
+import { getByUserId, getMailbox, linkMailboxAtomically } from "../db/mailboxRepository";
 import { installWatch } from "../gmail/watch";
 import { catchUpMailbox } from "../gmail/catchUpMailbox";
-import { untrackMailbox } from "../gmail/untrackMailbox";
+import { remoteUntrack } from "../gmail/untrackMailbox";
 import { sendMessage } from "../bot/sendMessage";
 import {
     chooseLoginMessage,
@@ -20,8 +20,8 @@ import {
     PUBLIC_DIR
 } from "../constants";
 
-async function unlinkReplacedMailbox(oldMailbox:MailboxesTable,newEmail:string,chatId:number){
-    const result=await untrackMailbox(oldMailbox);
+async function cleanupReplacedMailbox(oldMailbox:MailboxesTable,newEmail:string,chatId:number){
+    const result=await remoteUntrack(oldMailbox);
     if(!result.stopped||!result.revoked)
         console.log({event:"replaced_unlink_incomplete",email:oldMailbox.email,stopped:result.stopped,revoked:result.revoked});
     try{
@@ -104,15 +104,19 @@ export async function callback(req:Request,res:Response){
         // Install the watch before persisting anything: a failed watch must
         // leave the previous linkage untouched (US-1 CA3).
         const {historyId,expirationDate}=await installWatch(email,tokens.refreshToken,tokens.accessToken);
-        if(oldMailbox!==null&&oldMailbox.email!==email)
-            await unlinkReplacedMailbox(oldMailbox,email,chatId);
+        const replacedUserId=oldMailbox!==null&&oldMailbox.email!==email?oldMailbox.userId:null;
         const mailboxToCreate:InsertedMailbox={
             userId:user.id,
             email,
             refreshToken:tokens.refreshToken
         };
-        await createMailbox(mailboxToCreate);
-        await setWatchSuccess(email,historyId,expirationDate);
+        // Old-mailbox unlink, new-mailbox insert and the watch basis commit in
+        // ONE transaction (FR-3/FR-15): a mid-flow failure can no longer leave
+        // the old linkage destroyed with no new one, nor an active mailbox
+        // without a watch. Remote cleanup and notices run after the commit.
+        await linkMailboxAtomically(mailboxToCreate,{historyIdBasis:historyId,watchExpiration:expirationDate},replacedUserId);
+        if(oldMailbox!==null&&oldMailbox.email!==email)
+            await cleanupReplacedMailbox(oldMailbox,email,chatId);
         if(previousChatId!==null&&Number(previousChatId)!==chatId)
             await notifyPreviousOwner(Number(previousChatId),email);
         console.log({event:"oauth_linked",email});

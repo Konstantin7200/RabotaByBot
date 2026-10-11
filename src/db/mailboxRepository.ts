@@ -14,31 +14,42 @@ function decryptRow<T extends { refreshToken: string | null }>(row: T): T {
 }
 
 type CreatedMailbox=Omit<InsertedMailbox,'linkedAt'|'tokenGrantedAt'|'accessStatus'|'historyIdBasis'|'watchExpiration'>
-export async function createMailbox(value:CreatedMailbox){
-    const valueForDb:InsertedMailbox={
+
+// Shared payloads so createMailbox/setWatchSuccess and the transactional
+// linkMailboxAtomically can never drift apart.
+function mailboxInsertValues(value:CreatedMailbox):InsertedMailbox{
+    return {
         ...value,
         refreshToken:encryptToken(value.refreshToken)??null,
         linkedAt:new Date(),
         tokenGrantedAt:new Date(),
         accessStatus:'active',
     }
-    await db.insert(mailboxesTable).values(valueForDb).onConflictDoUpdate({
-        target: mailboxesTable.email,
-        set: {
-            userId: valueForDb.userId,
-            refreshToken: valueForDb.refreshToken,
-            tokenGrantedAt: valueForDb.tokenGrantedAt,
-            accessStatus: 'active',
-            linkedAt: valueForDb.linkedAt,
-            tokenExpiryWarnedAt: null,
-            consecutiveTransientFailures: 0,
-            failureNotifiedAt: null,
-        },
-    });
 }
-export async function unlinkMailbox(userId:number) {
-    const updateValue:Partial<InsertedMailbox>={
-        accessStatus:'unlinked',
+function mailboxUpsertSet(valueForDb:InsertedMailbox){
+    return {
+        userId: valueForDb.userId,
+        refreshToken: valueForDb.refreshToken,
+        tokenGrantedAt: valueForDb.tokenGrantedAt,
+        accessStatus: 'active' as const,
+        linkedAt: valueForDb.linkedAt,
+        tokenExpiryWarnedAt: null,
+        consecutiveTransientFailures: 0,
+        failureNotifiedAt: null,
+    };
+}
+function watchSuccessSet(historyIdBasis:string,watchExpiration:Date){
+    return {
+        historyIdBasis:sql`COALESCE(${mailboxesTable.historyIdBasis}, ${historyIdBasis})`,
+        historyIdBasisAt: sql`COALESCE(${mailboxesTable.historyIdBasisAt}, CASE WHEN ${mailboxesTable.historyIdBasis} IS NULL THEN CURRENT_TIMESTAMP ELSE NULL END)`,
+        watchExpiration,
+        watchRenewedAt: new Date(),
+        accessStatus:'active' as const
+    }
+}
+function unlinkSet():Partial<InsertedMailbox>{
+    return {
+        accessStatus:'unlinked' as const,
         refreshToken:null,
         userId:null,
         watchExpiration:null,
@@ -50,7 +61,42 @@ export async function unlinkMailbox(userId:number) {
         historyIdBasis:null,
         historyIdBasisAt:null
     }
-    const rows=await db.update(mailboxesTable).set(updateValue).where(eq(mailboxesTable.userId,userId)).returning();
+}
+
+export async function createMailbox(value:CreatedMailbox){
+    const valueForDb=mailboxInsertValues(value);
+    await db.insert(mailboxesTable).values(valueForDb).onConflictDoUpdate({
+        target: mailboxesTable.email,
+        set: mailboxUpsertSet(valueForDb),
+    });
+}
+
+// FR-3/FR-15: persist a freshly linked mailbox atomically. The replaced
+// mailbox's DB unlink runs in the same transaction (before the insert, so
+// the unique userId slot is freed) - a failure can no longer leave the user
+// with an active row that has no watch, or with the old linkage destroyed
+// and no new one. Remote cleanup (users.stop, oauth2.revoke) and Telegram
+// notices are the caller's job, after the commit.
+export async function linkMailboxAtomically(
+    value:CreatedMailbox,
+    watch:{historyIdBasis:string,watchExpiration:Date},
+    replacedUserId:number|null,
+){
+    await db.transaction(async (tx)=>{
+        if(replacedUserId!==null)
+            await tx.update(mailboxesTable).set(unlinkSet()).where(eq(mailboxesTable.userId,replacedUserId));
+        const valueForDb=mailboxInsertValues(value);
+        await tx.insert(mailboxesTable).values(valueForDb).onConflictDoUpdate({
+            target: mailboxesTable.email,
+            set: mailboxUpsertSet(valueForDb),
+        });
+        await tx.update(mailboxesTable).set(watchSuccessSet(watch.historyIdBasis,watch.watchExpiration))
+            .where(eq(mailboxesTable.email,value.email));
+    });
+}
+
+export async function unlinkMailbox(userId:number) {
+    const rows=await db.update(mailboxesTable).set(unlinkSet()).where(eq(mailboxesTable.userId,userId)).returning();
     return rows.length>0?rows[0]:null;
 }
 
@@ -70,13 +116,8 @@ export async function getMailboxByChatId(chatId:string) {
 }
 
 export async function setWatchSuccess(email:string,historyIdBasis:string,watchExpiration:Date) {
-    await db.update(mailboxesTable).set({
-        historyIdBasis:sql`COALESCE(${mailboxesTable.historyIdBasis}, ${historyIdBasis})`,
-        historyIdBasisAt: sql`COALESCE(${mailboxesTable.historyIdBasisAt}, CASE WHEN ${mailboxesTable.historyIdBasis} IS NULL THEN CURRENT_TIMESTAMP ELSE NULL END)`,
-        watchExpiration,
-        watchRenewedAt: new Date(),
-        accessStatus:'active'
-    }).where(eq(mailboxesTable.email,email));
+    await db.update(mailboxesTable).set(watchSuccessSet(historyIdBasis,watchExpiration))
+        .where(eq(mailboxesTable.email,email));
 }
 
 type AccessFailureStatus=Exclude<typeof accessStatusEnum.enumValues[number],'active'|'unlinked'>
