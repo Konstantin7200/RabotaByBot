@@ -1,5 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decryptSecret, decryptTokenOrNull, encryptSecret } from "./secretBox";
+
+// secretBox reads the key from the validated config; the tests keep driving
+// TOKEN_ENCRYPTION_KEY through process.env, so the mock forwards at call time.
+vi.mock("../config", () => ({
+    EnvConfig: {
+        get tokenEncryptionKey() {
+            return process.env.TOKEN_ENCRYPTION_KEY;
+        },
+    },
+}));
 
 const KEY = "a".repeat(64);
 

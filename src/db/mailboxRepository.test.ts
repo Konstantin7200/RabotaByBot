@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Encryption runs through secretBox, which reads the key from the validated
+// config; the mock forwards TOKEN_ENCRYPTION_KEY so beforeEach can set it.
+vi.mock("../config", () => ({
+    EnvConfig: {
+        get tokenEncryptionKey() {
+            return process.env.TOKEN_ENCRYPTION_KEY;
+        },
+    },
+}));
+
 type Capture = {
     updated: boolean;
     selectedBasis: string | null;
