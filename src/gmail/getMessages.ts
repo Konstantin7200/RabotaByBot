@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { gmail_v1 } from "@googleapis/gmail";
 import { EnvConfig } from "../config";
 import { isHistoryUnavailable } from "./classifyAccessError";
@@ -27,7 +28,7 @@ async function getMessageOrSkip(gmail: gmail_v1.Gmail, id: string, email: string
         });
     } catch (err) {
         if (isHistoryUnavailable(err)) {
-            console.log({ event: "message_gone", email, messageId: id });
+            log.warn({ event: "message_gone", email, messageId: id });
             return null;
         }
         throw err;

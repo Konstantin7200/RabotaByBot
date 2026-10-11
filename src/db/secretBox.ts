@@ -1,9 +1,14 @@
+import { log } from "../logger";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { EnvConfig } from "../config";
 
 const VERSION_PREFIX = "v1:";
 
 function getKeyBytes(): Buffer {
-    const key = process.env.TOKEN_ENCRYPTION_KEY;
+    // The config module validates TOKEN_ENCRYPTION_KEY at startup; the guard
+    // stays so a malformed value (e.g. a hand-built config in tests) fails
+    // with the same explicit message instead of an opaque crypto error.
+    const key = EnvConfig.tokenEncryptionKey;
     if (typeof key !== "string" || !/^[0-9a-fA-F]{64}$/.test(key))
         throw new Error("TOKEN_ENCRYPTION_KEY must be 64 hex characters (32 bytes)");
     return Buffer.from(key, "hex");
@@ -34,7 +39,7 @@ export function decryptTokenOrNull(stored: string | null): string | null {
     try {
         return decryptSecret(stored);
     } catch {
-        console.log({ event: "refresh_token_decrypt_failed" });
+        log.warn({ event: "refresh_token_decrypt_failed" });
         return null;
     }
 }

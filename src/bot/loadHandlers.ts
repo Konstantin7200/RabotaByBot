@@ -2,13 +2,14 @@ import { startHandler } from "./startHandler";
 import { unlinkHandler } from "./unlinkHandler";
 import { statusHandler } from "./statusHandler";
 import { getBot } from ".";
+import { CMD } from "../constants";
 
 export function loadHandlers(){
     const bot=getBot();
 
-    bot.command('start',startHandler)
+    bot.command(CMD.START,startHandler)
 
-    bot.command('unlink',unlinkHandler)
+    bot.command(CMD.UNLINK,unlinkHandler)
 
-    bot.command('status',statusHandler)
+    bot.command(CMD.STATUS,statusHandler)
 }

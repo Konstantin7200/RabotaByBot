@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { unlinkMailbox } from "../db/mailboxRepository";
 import { MailboxesTable } from "../db/entityTypes";
 import { revokeToken } from "./revokeToken";
@@ -17,13 +18,13 @@ export async function remoteUntrack(mailbox: MailboxesTable): Promise<UntrackRes
         await stopWatching(mailbox.email, mailbox.refreshToken);
         stopped = true;
     } catch (err) {
-        console.log({ event: "watch_stop_failed", email: mailbox.email, err: String(err) });
+        log.warn({ event: "watch_stop_failed", email: mailbox.email, err: String(err) });
     }
     try {
         await revokeToken(mailbox.refreshToken);
         revoked = true;
     } catch (err) {
-        console.log({ event: "token_revoke_failed", email: mailbox.email, err: String(err) });
+        log.warn({ event: "token_revoke_failed", email: mailbox.email, err: String(err) });
     }
     return { stopped, revoked };
 }

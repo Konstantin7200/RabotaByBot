@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { getChatIdByMailboxId } from "../db/userRepository";
 import { sendWithRetry, SendRetryOptions } from "./sendWithRetry";
 
@@ -14,7 +15,7 @@ export async function notifyMailboxOwner(
         return true;
     }
     catch (err) {
-        console.log({ event: "owner_notify_failed", mailboxId, err: String(err) });
+        log.error({ event: "owner_notify_failed", mailboxId, err: String(err) });
         return false;
     }
 }

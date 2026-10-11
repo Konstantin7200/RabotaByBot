@@ -86,6 +86,9 @@ documented inline there.
 
 ### 5. Run
 
+Use the Node version pinned in `.nvmrc` (`nvm use`); `package.json` requires
+Node 20+.
+
 ```bash
 npm run dev     # hot reload
 npm run build && npm start
@@ -104,7 +107,9 @@ Works on any always-on host with public HTTPS (Railway, Fly.io, …). A host
 with a sleeping free tier violates the latency requirement — do not use one.
 
 - Set every variable from `.env.example`; `PUBLIC_BASE_URL` must be the public
-  `https://` origin (no trailing slash, no path).
+  `https://` origin (no trailing slash, no path). `LOG_LEVEL`
+  (`debug`|`info`|`warn`|`error`) is optional and defaults to `info` — logs
+  are single-line JSON objects with an `event` name.
 - **Run exactly one instance.** Dedup and delivery ordering rely on in-process
   locks (no database-level claim locking); a second replica would widen the
   documented single-duplicate crash window into concurrent duplicates.

@@ -1,3 +1,4 @@
+import { log } from "../../logger";
 import { EnvConfig } from "../../config";
 import { listDueForTokenExpiryWarning, markTokenExpiryWarned } from "../../db/mailboxRepository";
 import { notifyMailboxOwner } from "../../bot/notifyMailboxOwner";
@@ -7,7 +8,7 @@ import { MESSAGE_LOGIN_EXPIRING_SOON, TOKEN_EXPIRE_MS, TOKEN_EXPIRY_WARNING_MS }
 // is about to expire, so tracking does not stop silently after 7 days.
 export async function warnTokenExpiry() {
     if (EnvConfig.googleConsentMode === "production") {
-        console.log({ event: "token_expiry_warning_skipped", reason: "production_consent" });
+        log.info({ event: "token_expiry_warning_skipped", reason: "production_consent" });
         return;
     }
     const candidates = await listDueForTokenExpiryWarning();
@@ -22,11 +23,11 @@ export async function warnTokenExpiry() {
             continue;
         const sent = await notifyMailboxOwner(mailbox.id, MESSAGE_LOGIN_EXPIRING_SOON(mailbox.email, expiresAt));
         if (!sent) {
-            console.log({ event: "token_expiry_warning_not_sent", email: mailbox.email });
+            log.warn({ event: "token_expiry_warning_not_sent", email: mailbox.email });
             continue;
         }
         await markTokenExpiryWarned(mailbox.id);
         warned += 1;
     }
-    console.log({ event: "token_expiry_warning_check", candidates: candidates.length, warned });
+    log.info({ event: "token_expiry_warning_check", candidates: candidates.length, warned });
 }

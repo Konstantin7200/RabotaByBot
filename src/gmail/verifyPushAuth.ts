@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { JWTVerifyGetKey, jwtVerify } from "jose";
 
 const BEARER_PREFIX = "Bearer ";
@@ -14,7 +15,7 @@ export async function verifyPushAuth(
         await jwtVerify(authorization.slice(BEARER_PREFIX.length), getKey, { issuer: GOOGLE_ISSUERS, audience });
         return true;
     } catch (err) {
-        console.log({ event: "push_auth_verify_failed", err: String(err) });
+        log.warn({ event: "push_auth_verify_failed", err: String(err) });
         return false;
     }
 }

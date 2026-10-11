@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { Cron, CronOptions } from "croner";
 import {
     CATCHUP_TICK,
@@ -42,7 +43,7 @@ export function waitForIdleJobs(timeoutMs: number): Promise<void> {
     return new Promise((resolve) => {
         const timer = setTimeout(() => {
             idleWaiter = null;
-            console.log({ event: "job_drain_timeout", activeJobs });
+            log.warn({ event: "job_drain_timeout", activeJobs });
             resolve();
         }, timeoutMs);
         timer.unref();
@@ -56,16 +57,18 @@ export function waitForIdleJobs(timeoutMs: number): Promise<void> {
 function schedule(name: string, tick: string, fn: () => unknown) {
     const options: CronOptions = {
         protect: () => {
-            console.log({ event: "job_skipped_overlap", job: name });
+            log.warn({ event: "job_skipped_overlap", job: name });
         },
         catch: (err) => {
-            console.log({ event: "job_error", job: name, err: String(err) });
+            log.error({ event: "job_error", job: name, err: String(err) });
         },
     };
     const job = new Cron(tick, options, track(fn));
     jobs.push(job);
-    job.trigger();
-    console.log({ event: "scheduler_started", job: name, tick, nextRun: job.nextRun() });
+    // Fire the job once at startup without blocking the wiring; rejections
+    // are routed to the Cron `catch` option above.
+    void job.trigger();
+    log.info({ event: "scheduler_started", job: name, tick, nextRun: job.nextRun() });
     return job;
 }
 
@@ -82,5 +85,5 @@ export function stopScheduler() {
     for (const job of jobs)
         job.stop();
     jobs.length = 0;
-    console.log({ event: "scheduler_stopped", activeJobs });
+    log.info({ event: "scheduler_stopped", activeJobs });
 }

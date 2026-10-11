@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { MailboxesTable } from "../db/entityTypes";
 import { setAccessFailure } from "../db/mailboxRepository";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
@@ -12,5 +13,5 @@ export async function reportUnreadableToken(mailbox: MailboxesTable): Promise<vo
         return;
     await setAccessFailure(mailbox.email, "expired");
     await notifyMailboxOwner(mailbox.id, MESSAGE_WATCH_EXPIRED(mailbox.email));
-    console.log({ event: "refresh_token_unreadable_marked", email: mailbox.email });
+    log.warn({ event: "refresh_token_unreadable_marked", email: mailbox.email });
 }

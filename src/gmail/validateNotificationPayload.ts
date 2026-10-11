@@ -1,5 +1,5 @@
 
-type NotificationBody={
+export type NotificationBody={
   emailAddress: string,
   historyId: string
 }

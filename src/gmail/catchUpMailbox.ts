@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { gmail_v1 } from "@googleapis/gmail";
 import { AddNotificationType, addNotifications, listByMessageIds, markStaleAsSentForMailbox } from "../db/notificationRepository";
 import { advanceBasis, setAccessFailure } from "../db/mailboxRepository";
@@ -52,7 +53,7 @@ async function ingestAndDeliver(
     // the delivery batch below (it is excluded from claimDueRetries).
     const swept = await markStaleAsSentForMailbox(mailbox.id);
     if (swept > 0)
-        console.log({ event: "stale_sweep_inline", email: mailbox.email, count: swept });
+        log.info({ event: "stale_sweep_inline", email: mailbox.email, count: swept });
     let delivered = 0;
     if (rows.length > 0) {
         await deliverBatchUntilTerminal(rows.map((r) => r.id));
@@ -81,7 +82,7 @@ async function runFallbackPass(gmail: gmail_v1.Gmail, mailbox: MailboxesTable): 
 
 async function handleAccessError(err: unknown, mailbox: MailboxesTable): Promise<never> {
     const kind = classifyAccessError(err);
-    console.log({ event: "catch_up_mailbox_failed", email: mailbox.email, kind, err });
+    log.error({ event: "catch_up_mailbox_failed", email: mailbox.email, kind, err });
     if (kind === "transient" && mailbox.accessStatus === "active") {
         await reportTransientFailure(mailbox.id, mailbox.email);
     } else if (kind !== "transient" && mailbox.accessStatus === "active") {

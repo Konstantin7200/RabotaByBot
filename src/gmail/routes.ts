@@ -1,3 +1,4 @@
+import { log } from "../logger";
 import { Router } from "express";
 import { createRemoteJWKSet } from "jose";
 import { EnvConfig } from "../config";
@@ -8,7 +9,7 @@ export const gmailRouter=Router();
 
 const audience = derivePushAudience(EnvConfig.publicBaseUrl);
 const certsUrl = new URL("https://www.googleapis.com/oauth2/v3/certs");
-console.log({ event: "push_auth_config", audience, certsUrl });
+log.info({ event: "push_auth_config", audience, certsUrl });
 
 const requirePushAuth = createRequirePushAuth(
     createRemoteJWKSet(certsUrl),
