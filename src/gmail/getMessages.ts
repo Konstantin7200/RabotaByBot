@@ -1,5 +1,6 @@
 import { gmail_v1 } from "@googleapis/gmail";
 import { EnvConfig } from "../config";
+import { isHistoryUnavailable } from "./classifyAccessError";
 import { isFromRabotaBy } from "./isFromRabotaBy";
 import { isResponseTemplate } from "./isResponseTemplate";
 import { messageBodyToText } from "./messageBody";
@@ -12,15 +13,33 @@ export interface MessageWithText {
     fromHeader: string | null;
 }
 
+// A 404 means the message is gone (deleted by the user) - nothing to notify
+// about and no later attempt could ever fetch it, so it is skipped.
+// Everything else propagates: the whole batch must fail so the basis does
+// not advance past a message that is merely not fetchable right now.
+async function getMessageOrSkip(gmail: gmail_v1.Gmail, id: string, email: string, format: "metadata" | "full") {
+    try {
+        return await gmail.users.messages.get({
+            format,
+            ...(format === "metadata" ? { metadataHeaders: ["From", "Subject"] } : {}),
+            id,
+            userId: email,
+        });
+    } catch (err) {
+        if (isHistoryUnavailable(err)) {
+            console.log({ event: "message_gone", email, messageId: id });
+            return null;
+        }
+        throw err;
+    }
+}
+
 async function validateMessages(gmail:gmail_v1.Gmail,messageIds: string[], email: string): Promise<string[]> {
     const validMessageIds: string[] = [];
     for (const id of messageIds) {
-        const response = await gmail.users.messages.get({
-            format: "metadata",
-            metadataHeaders: ["From", "Subject"],
-            id,
-            userId: email
-        });
+        const response = await getMessageOrSkip(gmail, id, email, "metadata");
+        if (response === null)
+            continue;
         const headers = response.data.payload?.headers ?? [];
         const fromHeader = headers.find(header => header.name?.toLowerCase() === "from");
         const subjectHeader = headers.find(header => header.name?.toLowerCase() === "subject");
@@ -36,11 +55,9 @@ async function getMessages(gmail:gmail_v1.Gmail,messageIds: string[], email: str
 
     const messages: MessageWithText[] = [];
     for (const id of validMessageIds) {
-        const response = await gmail.users.messages.get({
-            format: "full",
-            id,
-            userId: email
-        });
+        const response = await getMessageOrSkip(gmail, id, email, "full");
+        if (response === null)
+            continue;
         const subject=response.data.payload?.headers?.find(header => header.name?.toLowerCase() === "subject")?.value ?? 'Unknown';
         const from=response.data.payload?.headers?.find(header => header.name?.toLowerCase() === "from")?.value ?? null;
         messages.push({ id, text: messageBodyToText(response.data.payload),subject,fromHeader:from });

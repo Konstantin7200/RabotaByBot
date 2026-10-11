@@ -7,7 +7,8 @@ import { addNotifications, AddNotificationType, listByMessageIds, listDeliverabl
 import { advanceBasis, getMailbox, setAccessFailure } from "../db/mailboxRepository";
 import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
 import { getUserGmailClient } from "./getUserGmailClient";
-import { classifyAccessError } from "./classifyAccessError";
+import { catchUpMailbox } from "./catchUpMailbox";
+import { classifyAccessError, isHistoryUnavailable } from "./classifyAccessError";
 import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
 import { reportPipelineSuccess, reportTransientFailure } from "../bot/failureNotice";
 import { reportUnreadableToken } from "./reportUnreadableToken";
@@ -90,6 +91,20 @@ export async function notificationHandler(req: Request, res: Response) {
             return res.status(500).send();
         }
     } catch (err) {
+        // A stale basis history id fails every push with 404 until the
+        // messages.list fallback runs - delegate to the catch-up pass (FR-14)
+        // so recovery takes seconds instead of the next daily pass.
+        if (isHistoryUnavailable(err) && loadedMailbox !== null
+            && loadedMailbox.accessStatus === "active" && loadedMailbox.historyIdBasis !== null) {
+            console.log({ event: "push_falls_back_to_catch_up", email: decoded.emailAddress });
+            try {
+                await catchUpMailbox(loadedMailbox);
+                res.status(200).send();
+            } catch {
+                res.status(500).send();
+            }
+            return;
+        }
         const kind = classifyAccessError(err);
         console.log({ event: "push_processing_failed", email: decoded.emailAddress, kind, err: String(err) });
         if (kind === "transient" && loadedMailbox !== null && loadedMailbox.accessStatus === "active") {

@@ -180,11 +180,12 @@ describe("catchUpMailbox — messages.list fallback on stale history id", () => 
         expect(advanceBasis).not.toHaveBeenCalled();
     });
 
-    it("treats a 404 from messages.get as an ordinary error, not a fallback trigger", async () => {
+    it("treats a 404 from messages.get as transient, not a fallback trigger or access loss", async () => {
         vi.mocked(getDataFromMessages).mockRejectedValue(notFound);
         await expect(catchUpMailbox(mailbox)).rejects.toThrow("not found");
         expect(listMessageIdsSince).not.toHaveBeenCalled();
-        expect(setAccessFailure).toHaveBeenCalledWith("a@b.c", "error");
+        expect(setAccessFailure).not.toHaveBeenCalled();
+        expect(registerTransientFailure).toHaveBeenCalledWith(7);
         expect(advanceBasis).not.toHaveBeenCalled();
     });
 });

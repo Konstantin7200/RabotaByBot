@@ -14,7 +14,7 @@ Companion documents: [`Technical assignment (RU).md`](./Technical%20assignment%2
 flowchart LR
     TG[Telegram] -- updates -->|X-Telegram-Bot-Api-Secret-Token| WH[POST /telegram/webhook]
     WH --> BOT[grammY bot\n/ start · / status · / unlink]
-    BOT --> OAUTH[POST /oauth/callback\nOAuth success / error pages]
+    BOT --> OAUTH[GET /oauth/callback\nOAuth success / error pages]
     OAUTH --> PG1[(PostgreSQL)]
     OAUTH --> GAPI[Gmail API\nusers.watch]
     GAPI --> TOPIC[GCP Pub/Sub topic]
@@ -37,9 +37,9 @@ flowchart LR
 
 | Command | What it does |
 |---|---|
-| `/start` | Starts Google OAuth (scope `gmail.readonly`, offline access) and links the mailbox to this chat. Also re-links / restores access. |
+| `/start` | Starts Google OAuth (scopes `gmail.readonly`, `openid`, `userinfo.email`; offline access) and links the mailbox to this chat. Also re-links / restores access. |
 | `/status` | Shows linked email, login expiry, watch state and delivery problems. |
-| `/unlink` | Stops the watch, revokes the refresh token, clears credentials, keeps the dedup journal. |
+| `/unlink` | Stops the watch, revokes the refresh token (`openid`, `userinfo.email`, `gmail.readonly`), clears credentials, keeps the dedup journal. |
 
 ## Setup
 
@@ -51,7 +51,11 @@ flowchart LR
    consent screen is in *testing* mode (≤ 100 users; refresh tokens then expire
    after 7 days — the bot warns you before that).
 3. Create a **Pub/Sub topic** and a push subscription pointing at
-   `https://<your-host>/gmail/notification`.
+   `https://<your-host>/gmail/notification`. Set the subscription's
+   **ack deadline to ≥ 360 s** (`ack-deadline-seconds`; hard maximum is 600 s) —
+   the webhook may hold a request for up to its 4-minute inline delivery budget,
+   and the default deadline would make Pub/Sub redeliver pushes that are still
+   being processed.
 4. Grant the topic role `roles/pubsub.publisher` to the service account
    `gmail-api-push@system.gserviceaccount.com` (Gmail uses it to publish
    watch notifications).
@@ -100,7 +104,10 @@ Works on any always-on host with public HTTPS (Railway, Fly.io, …). A host
 with a sleeping free tier violates the latency requirement — do not use one.
 
 - Set every variable from `.env.example`; `PUBLIC_BASE_URL` must be the public
-  `https://` origin (no trailing slash).
+  `https://` origin (no trailing slash, no path).
+- **Run exactly one instance.** Dedup and delivery ordering rely on in-process
+  locks (no database-level claim locking); a second replica would widen the
+  documented single-duplicate crash window into concurrent duplicates.
 - On boot the bot registers the Telegram webhook
   (`PUBLIC_BASE_URL/telegram/webhook`) and renews Gmail watches at least daily.
 - `SIGTERM`/`SIGINT` stop the scheduler, drain in-flight jobs (up to 5 s) and
@@ -116,6 +123,9 @@ with a sleeping free tier violates the latency requirement — do not use one.
 | Journal retention | Sent rows older than 30 days are deleted by the daily `retention_cleanup` job (04:00); pending/failed rows are kept until they reach a terminal state. |
 | Google consent screen mode | `GOOGLE_CONSENT_MODE=testing` (default): refresh tokens expire in 7 days; `/status` shows the computed expiry and a once-per-grant advance warning is sent 24 h before it (US-8). Set `production` to drop the fixed-expiry messaging. |
 | OAuth callback with an unknown / expired / superseded `state` | Browser-only error page; no Telegram message. The `chatId` lives in the state row, which is consumed on read and purged by any later `/start` (or overwritten by a second `/start` for the same chat), so a notice would be unreliable — agreed limitation of US-1 CA3. Cancel/failure *with* a valid `state` still notifies Telegram as required. |
+| Notifications queued while a chat is blocked | Delivered late (agreed): after retries are exhausted the row is marked `failed` and replayed by the next daily catch-up pass (boot + 03:00) — the mechanism FR-11 names, with no time bound in the spec. Delay can be up to ~24 h; the state is visible in `/status`. |
+| Hard FR-12 access-loss notice lost in transit (agreed) | If the one-shot "access lost" Telegram send fails after the mailbox status was already flipped, the notice is not retried — `/status` remains the signal. Accepting the rare loss instead of adding a notice-state column + reconciler. |
+| Gmail client package | The assignment's stack table says `googleapis`; this repo uses the slimmer `@googleapis/gmail` + `google-auth-library` directly (the umbrella package was removed as unused). Same API, deliberate deviation. |
 
 ## Manual acceptance checklist (release gate)
 
