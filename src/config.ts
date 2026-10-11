@@ -36,24 +36,6 @@ type UnvalidatedConfigType= {
         databaseUrl:unknown;
     }
 }
-type ValidatedConfigType={
-    port:string,
-    tgBotToken:string,
-    telegramWebhookSecret:string,
-    publicBaseUrl:string,
-    tokenEncryptionKey:string,
-    rabotaSubjectPatterns:string[],
-    googleConsentMode:'testing'|'production',
-    googleAuth:{
-        clientId:string,
-        secret:string,
-        redirectUri:string,
-        topicName:string
-    },
-    database:{
-        databaseUrl:string;
-    }
-}
 function createConfig():ConfigType{
     const config:UnvalidatedConfigType={
         port:process.env.PORT,
@@ -77,49 +59,62 @@ function createConfig():ConfigType{
             databaseUrl:process.env.DATABASE_URL
         }
     };
-    if(validateConfig(config))
-    {
-        const typedConfig:ConfigType={
-            ...config,
-            port:parseInt(config.port,10)
-        }
-        return typedConfig;
-    }
-    throw Error("Env doesnt contain nessesary variables");
+    if(!validateConfig(config))
+        throw Error("unreachable");
+    return{
+        ...config,
+        port:parseInt(config.port,10)
+    };
 }
+type ValidatedConfigType=Omit<ConfigType,'port'> & {port:string};
+// Throws listing every invalid variable; narrows for createConfig.
 function validateConfig(config:UnvalidatedConfigType):config is ValidatedConfigType{
+    const problems=configProblems(config);
+    if(problems.length>0)
+        throw Error(`Invalid configuration: ${problems.join(', ')}`);
+    return true;
+}
+function configProblems(config:UnvalidatedConfigType):string[]{
+    const problems:string[]=[];
     if(typeof config.port!=='string'||Number.isNaN(parseInt(config.port,10)))
-        return false;
+        problems.push('PORT');
     if(typeof config.tgBotToken!=='string'||config.tgBotToken.trim()==="")
-        return false;
+        problems.push('TG_BOT_TOKEN');
     if(typeof config.telegramWebhookSecret!=='string'||config.telegramWebhookSecret.trim()==="")
-        return false;
+        problems.push('TELEGRAM_WEBHOOK_SECRET');
     if(typeof config.tokenEncryptionKey!=='string'||!/^[0-9a-fA-F]{64}$/.test(config.tokenEncryptionKey))
-        return false;
+        problems.push('TOKEN_ENCRYPTION_KEY (must be 64 hex chars)');
     if(!Array.isArray(config.rabotaSubjectPatterns))
-        return false;
+        problems.push('RABOTA_SUBJECT_PATTERNS');
     if(config.googleConsentMode!=='testing'&&config.googleConsentMode!=='production')
-        return false;
+        problems.push('GOOGLE_CONSENT_MODE (testing|production)');
     if(typeof config.publicBaseUrl!=='string'||config.publicBaseUrl.trim()==="")
-        return false;
-    try{
-        const parsed=new URL(config.publicBaseUrl);
-        if(parsed.protocol!=='https:'&&parsed.protocol!=='http:')
-            return false;
-    }catch{
-        return false;
+        problems.push('PUBLIC_BASE_URL');
+    else{
+        try{
+            const parsed=new URL(config.publicBaseUrl);
+            if(parsed.protocol!=='https:'&&parsed.protocol!=='http:')
+                problems.push('PUBLIC_BASE_URL (http(s) only)');
+            // A path-bearing base would break both fixed routes
+            // (/telegram/webhook, /oauth/callback) - webhooks would 404 and the
+            // OIDC audience would mismatch => total push outage.
+            else if(parsed.pathname!=='/')
+                problems.push('PUBLIC_BASE_URL (must not contain a path)');
+        }catch{
+            problems.push('PUBLIC_BASE_URL (invalid URL)');
+        }
     }
     if(typeof config.googleAuth.clientId!=='string'||config.googleAuth.clientId.trim()==="")
-        return false;
+        problems.push('GOOGLE_CLIENT_ID');
     if(typeof config.googleAuth.redirectUri!=='string'||config.googleAuth.redirectUri.trim()==="")
-        return false;
+        problems.push('GOOGLE_REDIRECT_URI');
     if(typeof config.googleAuth.secret!=='string'||config.googleAuth.secret.trim()==="")
-        return false;
+        problems.push('GOOGLE_CLIENT_SECRET');
     if(typeof config.googleAuth.topicName!=="string"||config.googleAuth.topicName.trim()==="")
-        return false;
+        problems.push('GOOGLE_TOPIC_NAME');
     if(typeof config.database.databaseUrl!=="string"||config.database.databaseUrl.trim()==="")
-        return false;
-    return true;
+        problems.push('DATABASE_URL');
+    return problems;
 
 }
 export const EnvConfig=createConfig()

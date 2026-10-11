@@ -55,6 +55,16 @@ describe("EnvConfig", () => {
         await expect(loadConfig({ PUBLIC_BASE_URL: "not a url" })).rejects.toThrow();
     });
 
+    it("rejects a PUBLIC_BASE_URL that contains a path", async () => {
+        await expect(loadConfig({ PUBLIC_BASE_URL: "https://bot.example.com/bot" }))
+            .rejects.toThrow(/PUBLIC_BASE_URL \(must not contain a path\)/);
+    });
+
+    it("names the offending variable in the error message", async () => {
+        await expect(loadConfig({ TELEGRAM_WEBHOOK_SECRET: undefined }))
+            .rejects.toThrow(/TELEGRAM_WEBHOOK_SECRET/);
+    });
+
     it("rejects a TOKEN_ENCRYPTION_KEY that is not 64 hex characters", async () => {
         await expect(loadConfig({ TOKEN_ENCRYPTION_KEY: "nope" })).rejects.toThrow();
     });

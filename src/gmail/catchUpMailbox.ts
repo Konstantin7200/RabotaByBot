@@ -11,7 +11,7 @@ import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
 import { reportPipelineSuccess, reportTransientFailure } from "../bot/failureNotice";
 import { reportUnreadableToken } from "./reportUnreadableToken";
 import { classifyAccessError, isHistoryUnavailable } from "./classifyAccessError";
-import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR } from "../constants";
+import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR, RETENTION_DAYS } from "../constants";
 
 export type CatchUpSkipReason = "not_active" | "no_token" | "no_basis";
 export type CatchUpResult =
@@ -65,7 +65,12 @@ async function runFallbackPass(gmail: gmail_v1.Gmail, mailbox: MailboxesTable): 
     // FR-14: never earlier than the current basis; if nothing was delivered
     // yet, fall back to the time access was granted.
     const since = mailbox.historyIdBasisAt ?? mailbox.lastDeliveredAt ?? mailbox.tokenGrantedAt ?? new Date(0);
-    const afterUnixSeconds = Math.max(0, Math.floor(since.getTime() / 1000) - 1);
+    // M2: a message older than the retention window has no dedup key left
+    // (cleanup already deleted it), so re-listing it would re-insert a
+    // duplicate row - never scan earlier than now - RETENTION_DAYS.
+    const retentionFloor = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const boundedSince = since > retentionFloor ? since : retentionFloor;
+    const afterUnixSeconds = Math.max(0, Math.floor(boundedSince.getTime() / 1000) - 1);
     const ids = await listMessageIdsSince(gmail, mailbox.email, afterUnixSeconds);
     const profile = await gmail.users.getProfile({ userId: mailbox.email });
     const historyId = profile.data.historyId;
