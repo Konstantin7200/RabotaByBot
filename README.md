@@ -12,21 +12,21 @@ Companion documents: [`Technical assignment (RU).md`](./Technical%20assignment%2
 
 ```mermaid
 flowchart LR
-    TG[Telegram] -- updates -->|X-Telegram-Bot-Api-Secret-Token| WH[POST /telegram/webhook]
-    WH --> BOT[grammY bot\n/ start · / status · / unlink]
-    BOT --> OAUTH[GET /oauth/callback\nOAuth success / error pages]
+    TG[Telegram] -->|updates<br/>X-Telegram-Bot-Api-Secret-Token| WH[POST /telegram/webhook]
+    WH --> BOT[grammY bot<br/>/start · /status · /unlink]
+    BOT --> OAUTH[GET /oauth/callback<br/>OAuth success / error pages]
     OAUTH --> PG1[(PostgreSQL)]
-    OAUTH --> GAPI[Gmail API\nusers.watch]
+    OAUTH --> GAPI[Gmail API<br/>users.watch]
     GAPI --> TOPIC[GCP Pub/Sub topic]
-    TOPIC -- push --> PS[POST /gmail/notification\nOIDC verified]
-    PS --> H[history.list from stored basis\nfilter: From = rabota.by]
-    H --> J[(notifications journal\npending → sent | failed)]
+    TOPIC -->|push| PS[POST /gmail/notification<br/>OIDC verified]
+    PS --> H[history.list from stored basis<br/>filter: From = rabota.by]
+    H --> J[(notifications journal<br/>pending → sent / failed)]
     J --> TGS[Telegram send]
-    CRON[Scheduler cron] --> R[renew watches daily\nFR-10]
-    CRON --> D[delivery retries every 10 s\nFR-11]
-    CRON --> C[catch-up pass 03:00\nFR-14]
-    CRON --> W[warn on expiring login\nUS-8]
-    CRON --> RT[retention cleanup 04:00\n30 days]
+    CRON[Scheduler cron] --> R[renew watches daily<br/>FR-10]
+    CRON --> D[delivery retries every 10 s<br/>FR-11]
+    CRON --> C[catch-up pass 03:00<br/>FR-14]
+    CRON --> W[warn on expiring login<br/>US-8]
+    CRON --> RT[retention cleanup 04:00<br/>30 days]
     R --> GAPI
     C --> H
     D --> TGS
