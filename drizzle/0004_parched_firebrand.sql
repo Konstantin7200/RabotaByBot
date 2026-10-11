@@ -1,0 +1,1 @@
+ALTER TABLE "mailboxes" ADD COLUMN "watchRenewedAt" timestamp with time zone;

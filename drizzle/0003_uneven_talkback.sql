@@ -1,0 +1,1 @@
+ALTER TABLE "notifications" ADD COLUMN "replayedAt" timestamp with time zone;

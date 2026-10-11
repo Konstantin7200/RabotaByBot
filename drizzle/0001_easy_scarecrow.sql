@@ -1,0 +1,1 @@
+ALTER TABLE "mailboxes" ADD COLUMN "historyIdBasisAt" timestamp with time zone;

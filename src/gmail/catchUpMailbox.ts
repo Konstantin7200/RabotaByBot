@@ -1,0 +1,121 @@
+import { log } from "../logger";
+import { gmail_v1 } from "@googleapis/gmail";
+import { AddNotificationType, addNotifications, listByMessageIds, markStaleAsSentForMailbox } from "../db/notificationRepository";
+import { advanceBasis, setAccessFailure } from "../db/mailboxRepository";
+import { MailboxesTable } from "../db/entityTypes";
+import { getDataFromMessages } from "./getMessages";
+import { getMessageIds } from "./getMessageIds";
+import { listMessageIdsSince } from "./listMessageIdsSince";
+import { getUserGmailClient } from "./getUserGmailClient";
+import { deliverBatchUntilTerminal } from "../bot/deliverBatch";
+import { notifyMailboxOwner } from "../bot/notifyMailboxOwner";
+import { reportPipelineSuccess, reportTransientFailure } from "../bot/failureNotice";
+import { reportUnreadableToken } from "./reportUnreadableToken";
+import { classifyAccessError, isHistoryUnavailable } from "./classifyAccessError";
+import { MESSAGE_WATCH_EXPIRED, MESSAGE_MAIL_PROCESSING_ERROR, RETENTION_DAYS } from "../constants";
+
+export type CatchUpSkipReason = "not_active" | "no_token" | "no_basis";
+export type CatchUpResult =
+    | { outcome: "skipped"; reason: CatchUpSkipReason }
+    | { outcome: "ok"; source: "history" | "messages_fallback";
+        scanned: number; inserted: number; delivered: number };
+
+// Journal inserts must be durable before the basis advances; any failure
+// before that point leaves the basis untouched so the next pass re-scans.
+async function ingestAndDeliver(
+    gmail: gmail_v1.Gmail,
+    mailbox: MailboxesTable,
+    messageIds: string[],
+    newHistoryId: string,
+    source: "history" | "messages_fallback",
+): Promise<CatchUpResult> {
+    let inserted = 0;
+    let rows: Awaited<ReturnType<typeof listByMessageIds>> = [];
+    if (messageIds.length > 0) {
+        const messageData = await getDataFromMessages(gmail, messageIds, mailbox.email);
+        const notifications: AddNotificationType[] = messageData.map((val) => ({
+            vacancy: val.vacancy || "Unknown",
+            employer: val.employer || "Unknown",
+            subject: val.subject || "Unknown",
+            fromHeader: val.fromHeader,
+            outcome: val.outcome,
+            gmailMessageId: val.gmailMessageId,
+            mailboxId: mailbox.id,
+        }));
+        if (notifications.length > 0)
+            inserted = await addNotifications(notifications);
+        rows = await listByMessageIds(mailbox.id, messageData.map((m) => m.gmailMessageId));
+    }
+    await advanceBasis(mailbox.id, newHistoryId);
+    await reportPipelineSuccess(mailbox.id, mailbox.email);
+    // Same FR-7 pre-ack sweep as the push handler: a stale row must reach a
+    // terminal state before this pass reports progress, and must not stall
+    // the delivery batch below (it is excluded from claimDueRetries).
+    const swept = await markStaleAsSentForMailbox(mailbox.id);
+    if (swept > 0)
+        log.info({ event: "stale_sweep_inline", email: mailbox.email, count: swept });
+    let delivered = 0;
+    if (rows.length > 0) {
+        await deliverBatchUntilTerminal(rows.map((r) => r.id));
+        delivered = rows.length;
+    }
+    return { outcome: "ok", source, scanned: messageIds.length, inserted, delivered };
+}
+
+async function runFallbackPass(gmail: gmail_v1.Gmail, mailbox: MailboxesTable): Promise<CatchUpResult> {
+    // FR-14: never earlier than the current basis; if nothing was delivered
+    // yet, fall back to the time access was granted.
+    const since = mailbox.historyIdBasisAt ?? mailbox.lastDeliveredAt ?? mailbox.tokenGrantedAt ?? new Date(0);
+    // M2: a message older than the retention window has no dedup key left
+    // (cleanup already deleted it), so re-listing it would re-insert a
+    // duplicate row - never scan earlier than now - RETENTION_DAYS.
+    const retentionFloor = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    const boundedSince = since > retentionFloor ? since : retentionFloor;
+    const afterUnixSeconds = Math.max(0, Math.floor(boundedSince.getTime() / 1000) - 1);
+    const ids = await listMessageIdsSince(gmail, mailbox.email, afterUnixSeconds);
+    const profile = await gmail.users.getProfile({ userId: mailbox.email });
+    const historyId = profile.data.historyId;
+    if (typeof historyId !== "string")
+        throw new Error("No history id from getProfile");
+    return await ingestAndDeliver(gmail, mailbox, ids, historyId, "messages_fallback");
+}
+
+async function handleAccessError(err: unknown, mailbox: MailboxesTable): Promise<never> {
+    const kind = classifyAccessError(err);
+    log.error({ event: "catch_up_mailbox_failed", email: mailbox.email, kind, err });
+    if (kind === "transient" && mailbox.accessStatus === "active") {
+        await reportTransientFailure(mailbox.id, mailbox.email);
+    } else if (kind !== "transient" && mailbox.accessStatus === "active") {
+        await setAccessFailure(mailbox.email, kind);
+        await notifyMailboxOwner(mailbox.id, kind === "expired"
+            ? MESSAGE_WATCH_EXPIRED(mailbox.email)
+            : MESSAGE_MAIL_PROCESSING_ERROR(mailbox.email));
+    }
+    throw err;
+}
+
+export async function catchUpMailbox(mailbox: MailboxesTable): Promise<CatchUpResult> {
+    if (mailbox.accessStatus !== "active")
+        return { outcome: "skipped", reason: "not_active" };
+    if (mailbox.refreshToken === null) {
+        await reportUnreadableToken(mailbox);
+        return { outcome: "skipped", reason: "no_token" };
+    }
+    if (mailbox.historyIdBasis === null)
+        return { outcome: "skipped", reason: "no_basis" };
+
+    try {
+        const gmail = getUserGmailClient(mailbox.refreshToken);
+        let scan: Awaited<ReturnType<typeof getMessageIds>>;
+        try {
+            scan = await getMessageIds(gmail, mailbox.email, mailbox.historyIdBasis);
+        } catch (err) {
+            if (!isHistoryUnavailable(err))
+                throw err;
+            return await runFallbackPass(gmail, mailbox);
+        }
+        return await ingestAndDeliver(gmail, mailbox, scan.messageIds, scan.newHistoryId, "history");
+    } catch (err) {
+        return await handleAccessError(err, mailbox);
+    }
+}
