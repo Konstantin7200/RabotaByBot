@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { StatusCodes } from "http-status-codes";
 import { isNotificationMessageBody } from "./validateNotificationBody";
 import { UnvalidatedNotificationBody, validateNotificationPayload } from "./validateNotificationPayload";
 import { getDataFromMessages } from "./getMessages";
@@ -20,7 +21,7 @@ export async function notificationHandler(req: Request, res: Response) {
     const body = req.body;
 
     if (!isNotificationMessageBody(body)) {
-        res.status(400).json({ error: "Invalid Pub/Sub message format" });
+        res.status(StatusCodes.BAD_REQUEST).json({ error: "Invalid Pub/Sub message format" });
         return;
     }
 
@@ -30,7 +31,7 @@ export async function notificationHandler(req: Request, res: Response) {
         if(!validateNotificationPayload(decoded))
             throw new Error('Bad notification payload');
     } catch {
-        res.status(400).json({ error: "Invalid message payload" });
+        res.status(StatusCodes.BAD_REQUEST).json({ error: "Invalid message payload" });
         return;
     }
 
@@ -39,16 +40,16 @@ export async function notificationHandler(req: Request, res: Response) {
         const mailbox = await getMailbox(decoded.emailAddress);
         loadedMailbox = mailbox;
         if (mailbox === null || mailbox.accessStatus === "unlinked") {
-            res.status(200).send();
+            res.status(StatusCodes.OK).send();
             return;
         }
         if (mailbox.refreshToken === null) {
             await reportUnreadableToken(mailbox);
-            res.status(200).send();
+            res.status(StatusCodes.OK).send();
             return;
         }
         if (mailbox.accessStatus !== "active") {
-            res.status(500).send();
+            res.status(StatusCodes.INTERNAL_SERVER_ERROR).send();
             return;
         }
         const gmail=getUserGmailClient(mailbox.refreshToken);
@@ -87,15 +88,15 @@ export async function notificationHandler(req: Request, res: Response) {
             // of this mailbox so the push is acked only once they are terminal.
             const targets=rows.length>0?rows:await listDeliverableByMailbox(mailbox.id);
             if(targets.length===0){
-                res.status(200).send();
+                res.status(StatusCodes.OK).send();
                 return;
             }
             const outcome=await deliverBatchUntilTerminal(targets.map((r)=>r.id));
-            res.status(outcome==='terminal'?200:503).send();
+            res.status(outcome==='terminal'?StatusCodes.OK:StatusCodes.SERVICE_UNAVAILABLE).send();
         }
         catch(err){
             console.log({ event: "push_batch_failed", email: decoded.emailAddress, err: String(err) });
-            return res.status(500).send();
+            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).send();
         }
     } catch (err) {
         // A stale basis history id fails every push with 404 until the
@@ -106,9 +107,9 @@ export async function notificationHandler(req: Request, res: Response) {
             console.log({ event: "push_falls_back_to_catch_up", email: decoded.emailAddress });
             try {
                 await catchUpMailbox(loadedMailbox);
-                res.status(200).send();
+                res.status(StatusCodes.OK).send();
             } catch {
-                res.status(500).send();
+                res.status(StatusCodes.INTERNAL_SERVER_ERROR).send();
             }
             return;
         }
@@ -122,6 +123,6 @@ export async function notificationHandler(req: Request, res: Response) {
                 ? MESSAGE_WATCH_EXPIRED(loadedMailbox.email)
                 : MESSAGE_MAIL_PROCESSING_ERROR(loadedMailbox.email));
         }
-        res.status(500).send();
+        res.status(StatusCodes.INTERNAL_SERVER_ERROR).send();
     }
 }

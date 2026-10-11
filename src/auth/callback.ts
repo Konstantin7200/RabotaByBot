@@ -1,4 +1,5 @@
 import { Request,Response } from "express";
+import { StatusCodes } from "http-status-codes";
 import { join } from "path";
 import { auth } from ".";
 import { EnvConfig } from "../config";
@@ -58,24 +59,24 @@ export async function callback(req:Request,res:Response){
     try{
         const state=req.query['state'];
         if(typeof state!=='string'){
-            respondError(res,400);
+            respondError(res,StatusCodes.BAD_REQUEST);
             return;
         }
         const key=await takeKey(state);
         if(key===null){
-            respondError(res,400);
+            respondError(res,StatusCodes.BAD_REQUEST);
             return;
         }
         chatId=parseInt(key.chatId,10);
         if(typeof req.query['error']==='string'){
             notifyChat(chatId,MESSAGE_FOR_AUTH_CANCELLED);
-            respondError(res,400);
+            respondError(res,StatusCodes.BAD_REQUEST);
             return;
         }
         const code=req.query['code'];
         if(typeof code!=='string'){
             notifyChat(chatId,MESSAGE_FOR_AUTH_FAILED);
-            respondError(res,400);
+            respondError(res,StatusCodes.BAD_REQUEST);
             return;
         }
         const userToCreate:InsertedUser={
@@ -121,7 +122,7 @@ export async function callback(req:Request,res:Response){
             await notifyPreviousOwner(Number(previousChatId),email);
         console.log({event:"oauth_linked",email});
         notifyChat(chatId,chooseLoginMessage(email,previousStatus));
-        res.status(200).sendFile(join(PUBLIC_DIR,"success.html"));
+        res.status(StatusCodes.OK).sendFile(join(PUBLIC_DIR,"success.html"));
         if (existing !== null && existing.historyIdBasis !== null)
             void getMailbox(email)
                 .then((m) => (m === null ? undefined : catchUpMailbox(m)))
@@ -130,6 +131,6 @@ export async function callback(req:Request,res:Response){
     } catch(err){
         console.log({event:"oauth_callback_failed",chatId,err:String(err)});
         notifyChat(chatId,MESSAGE_FOR_AUTH_FAILED);
-        respondError(res,500);
+        respondError(res,StatusCodes.INTERNAL_SERVER_ERROR);
     }
 }
