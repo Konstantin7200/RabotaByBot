@@ -11,8 +11,10 @@ vi.mock("../db/mailboxRepository", () => ({
     advanceBasis: vi.fn(),
     setAccessFailure: vi.fn(),
     registerTransientFailure: vi.fn(),
+    wasFailureNotified: vi.fn(),
     claimFailureNotice: vi.fn(),
     registerPipelineSuccess: vi.fn(),
+    consumeFailureNotice: vi.fn(),
 }));
 vi.mock("./getMessages", () => ({ getDataFromMessages: vi.fn() }));
 vi.mock("./getMessageIds", () => ({ getMessageIds: vi.fn() }));
@@ -23,7 +25,7 @@ vi.mock("../bot/notifyMailboxOwner", () => ({ notifyMailboxOwner: vi.fn() }));
 
 import { notificationHandler } from "./notificationHandler";
 import { addNotifications, listByMessageIds, listDeliverableByMailbox, markStaleAsSentForMailbox } from "../db/notificationRepository";
-import { advanceBasis, claimFailureNotice, getMailbox, registerPipelineSuccess, registerTransientFailure, setAccessFailure } from "../db/mailboxRepository";
+import { advanceBasis, claimFailureNotice, consumeFailureNotice, getMailbox, registerPipelineSuccess, registerTransientFailure, setAccessFailure, wasFailureNotified } from "../db/mailboxRepository";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
 import { catchUpMailbox } from "./catchUpMailbox";
@@ -67,8 +69,11 @@ beforeEach(() => {
     vi.mocked(listDeliverableByMailbox).mockResolvedValue([] as never);
     vi.mocked(advanceBasis).mockResolvedValue(true);
     vi.mocked(registerTransientFailure).mockResolvedValue(1);
+    vi.mocked(wasFailureNotified).mockResolvedValue(false);
     vi.mocked(claimFailureNotice).mockResolvedValue(true);
     vi.mocked(registerPipelineSuccess).mockResolvedValue(false);
+    vi.mocked(consumeFailureNotice).mockResolvedValue(undefined);
+    vi.mocked(notifyMailboxOwner).mockResolvedValue(true as never);
     vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("terminal");
 });
 

@@ -213,15 +213,30 @@ export async function claimFailureNotice(id:number):Promise<boolean> {
     return rows.length>0;
 }
 
-// US-10: atomically claim the right to send the "working again" message and
-// reset the failure streak. Concurrent successes can never both claim it.
+// US-9/US-10: read-only companion to claimFailureNotice - has the owner
+// already received the persistent-failure notice for this incident?
+export async function wasFailureNotified(id:number):Promise<boolean> {
+    const rows=await db.select({value:mailboxesTable.failureNotifiedAt}).from(mailboxesTable).where(eq(mailboxesTable.id,id));
+    return rows[0]?.value!==null&&rows[0]!==undefined;
+}
+
+// US-10: reset the failure streak (always, on any success) and report whether
+// a restore notice is owed. The failureNotifiedAt claim is NOT consumed here:
+// M5 moves the consume to after the restore notice was actually delivered,
+// so a Telegram outage cannot swallow the one-shot "working again" message.
 export async function registerPipelineSuccess(id:number):Promise<boolean> {
-    const claimed=await db.update(mailboxesTable)
-        .set({failureNotifiedAt:null})
-        .where(and(eq(mailboxesTable.id,id),isNotNull(mailboxesTable.failureNotifiedAt)))
-        .returning({value:mailboxesTable.id});
+    const rows=await db.select({value:mailboxesTable.failureNotifiedAt}).from(mailboxesTable).where(eq(mailboxesTable.id,id));
+    const owed=rows[0]?.value!==null&&rows[0]!==undefined;
     await db.update(mailboxesTable)
         .set({consecutiveTransientFailures:0})
         .where(and(eq(mailboxesTable.id,id),sql`${mailboxesTable.consecutiveTransientFailures} > 0`));
-    return claimed.length>0;
+    return owed;
+}
+
+// US-10: consume the failure-notice claim once the restore notice has been
+// delivered (M5, claim-after-send per warnTokenExpiry).
+export async function consumeFailureNotice(id:number):Promise<void> {
+    await db.update(mailboxesTable)
+        .set({failureNotifiedAt:null})
+        .where(and(eq(mailboxesTable.id,id),isNotNull(mailboxesTable.failureNotifiedAt)));
 }

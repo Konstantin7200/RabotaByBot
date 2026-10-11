@@ -4,8 +4,10 @@ vi.mock("../../db/mailboxRepository", () => ({
     listDueForRenewal: vi.fn(),
     setAccessFailure: vi.fn(),
     registerTransientFailure: vi.fn(),
+    wasFailureNotified: vi.fn(),
     claimFailureNotice: vi.fn(),
     registerPipelineSuccess: vi.fn(),
+    consumeFailureNotice: vi.fn(),
 }));
 vi.mock("../../bot/notifyMailboxOwner", () => ({ notifyMailboxOwner: vi.fn() }));
 vi.mock("../../gmail/watch", () => ({ watch: vi.fn() }));
@@ -13,10 +15,12 @@ vi.mock("../../gmail/watch", () => ({ watch: vi.fn() }));
 import { renewWatches } from "./renewWatches";
 import {
     claimFailureNotice,
+    consumeFailureNotice,
     listDueForRenewal,
     registerPipelineSuccess,
     registerTransientFailure,
     setAccessFailure,
+    wasFailureNotified,
 } from "../../db/mailboxRepository";
 import { notifyMailboxOwner } from "../../bot/notifyMailboxOwner";
 import { watch } from "../../gmail/watch";
@@ -34,8 +38,11 @@ beforeEach(() => {
     vi.mocked(listDueForRenewal).mockResolvedValue([base as never]);
     vi.mocked(watch).mockResolvedValue({ historyId: "1", expiration: "e" } as never);
     vi.mocked(registerTransientFailure).mockResolvedValue(1);
+    vi.mocked(wasFailureNotified).mockResolvedValue(false);
     vi.mocked(claimFailureNotice).mockResolvedValue(true);
     vi.mocked(registerPipelineSuccess).mockResolvedValue(false);
+    vi.mocked(consumeFailureNotice).mockResolvedValue(undefined);
+    vi.mocked(notifyMailboxOwner).mockResolvedValue(true);
 });
 
 describe("renewWatches", () => {

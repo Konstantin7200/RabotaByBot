@@ -9,8 +9,10 @@ vi.mock("../db/mailboxRepository", () => ({
     advanceBasis: vi.fn(),
     setAccessFailure: vi.fn(),
     registerTransientFailure: vi.fn(),
+    wasFailureNotified: vi.fn(),
     claimFailureNotice: vi.fn(),
     registerPipelineSuccess: vi.fn(),
+    consumeFailureNotice: vi.fn(),
 }));
 vi.mock("./getMessages", () => ({ getDataFromMessages: vi.fn() }));
 vi.mock("./getMessageIds", () => ({ getMessageIds: vi.fn() }));
@@ -21,7 +23,7 @@ vi.mock("../bot/notifyMailboxOwner", () => ({ notifyMailboxOwner: vi.fn() }));
 
 import { catchUpMailbox } from "./catchUpMailbox";
 import { addNotifications, listByMessageIds } from "../db/notificationRepository";
-import { advanceBasis, claimFailureNotice, registerPipelineSuccess, registerTransientFailure, setAccessFailure } from "../db/mailboxRepository";
+import { advanceBasis, claimFailureNotice, consumeFailureNotice, registerPipelineSuccess, registerTransientFailure, setAccessFailure, wasFailureNotified } from "../db/mailboxRepository";
 import { getDataFromMessages } from "./getMessages";
 import { getMessageIds } from "./getMessageIds";
 import { listMessageIdsSince } from "./listMessageIdsSince";
@@ -54,9 +56,11 @@ beforeEach(() => {
     vi.mocked(advanceBasis).mockResolvedValue(true);
     vi.mocked(setAccessFailure).mockResolvedValue(undefined as never);
     vi.mocked(registerTransientFailure).mockResolvedValue(1);
+    vi.mocked(wasFailureNotified).mockResolvedValue(false);
     vi.mocked(claimFailureNotice).mockResolvedValue(true);
     vi.mocked(registerPipelineSuccess).mockResolvedValue(false);
-    vi.mocked(notifyMailboxOwner).mockResolvedValue(undefined as never);
+    vi.mocked(consumeFailureNotice).mockResolvedValue(undefined);
+    vi.mocked(notifyMailboxOwner).mockResolvedValue(true as never);
     vi.mocked(deliverBatchUntilTerminal).mockResolvedValue("terminal");
     vi.mocked(listMessageIdsSince).mockResolvedValue(["m1"]);
     vi.mocked(gmail.users.getProfile).mockResolvedValue({ data: { historyId: "200" } });
