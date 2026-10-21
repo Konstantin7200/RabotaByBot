@@ -41,6 +41,11 @@ flowchart LR
 | `/status` | Shows linked email, login expiry, watch state and delivery problems. |
 | `/unlink` | Stops the watch, revokes the refresh token (`openid`, `userinfo.email`, `gmail.readonly`), clears credentials, keeps the dedup journal. |
 
+All commands are defined once in `src/bot/loadHandlers.ts` (`BOT_COMMANDS`):
+the same list registers the handlers and is published to Telegram via
+`setMyCommands`, so they appear in the client's command menu. A failure to
+publish is logged (`set_my_commands_failed`) and never blocks startup.
+
 ## Setup
 
 ### 1. Google Cloud
@@ -115,6 +120,8 @@ with a sleeping free tier violates the latency requirement — do not use one.
   documented single-duplicate crash window into concurrent duplicates.
 - On boot the bot registers the Telegram webhook
   (`PUBLIC_BASE_URL/telegram/webhook`) and renews Gmail watches at least daily.
+  It also publishes the command list (`/start`, `/status`, `/unlink`) to
+  Telegram's command menu; a failed publish is logged, not fatal.
 - `SIGTERM`/`SIGINT` stop the scheduler, drain in-flight jobs (up to 5 s) and
   close the HTTP server; a 10 s force-exit is the backstop.
 
